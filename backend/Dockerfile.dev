@@ -1,0 +1,7 @@
+FROM golang:alpine3.19
+
+WORKDIR /app
+RUN go install github.com/cosmtrek/air@latest
+EXPOSE 8080
+
+CMD ["air"]

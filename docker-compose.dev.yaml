@@ -1,0 +1,87 @@
+services:
+  backend-dev:
+    volumes:
+      - ./backend/:/app/
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    environment:
+      - CHROMA_DB_URL=http://chromadb:8000
+      - OLLAMA_URL=http://192.168.0.109:11434
+      - SEARXNG_DOMAIN=http://searxng:8080
+      - OPENAI_API_KEY=${OPENAI_API_KEY} # just export the key in your shell
+      - OLLAMA_MODEL_NAME=eramax/starling-lm-7b-beta:q6
+    networks:
+      - llm_network_dev
+
+  frontend-dev:
+    depends_on:
+      - backend-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./:/app/
+    environment:
+      - BACKEND_URL=http://backend:8080
+    ports:
+      - '3000:5173'
+    networks:
+      - llm_network_dev
+
+  chromadb:
+    image: chromadb/chroma
+    networks:
+      - llm_network_dev
+    # attach: false
+    # logging:
+    #   driver: none
+
+  redis:
+    container_name: redis
+    image: docker.io/library/redis:alpine
+    command: redis-server --save 30 1 --loglevel warning
+    networks:
+      - searxng
+    volumes:
+      - redis-data:/data
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+
+  searxng:
+    container_name: searxng
+    image: docker.io/searxng/searxng:latest
+    networks:
+      - searxng
+      - llm_network_dev
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=https://${SEARXNG_HOSTNAME:-localhost}/
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '1m'
+        max-file: '1'
+
+networks:
+  llm_network_dev:
+    driver: bridge
+  searxng:
+    ipam:
+      driver: default
+
+volumes:
+  redis-data:
