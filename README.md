@@ -4,14 +4,26 @@
 
 This is a completly locally running meta search engine using LLM Agents. The user can ask a question and the system will use a chain of LLMs to find the answer. The user can see the progress of the agents and the final answer. No OpenAI or Google API keys are needed.
 
+Here is a video of it in action, running completely locally (don't worry I'm working on a dark mode):
+
+https://github.com/nilsherzig/LLocalSearch/assets/72463901/d5ee9232-603e-4471-9e6b-b52ae46f7def
+
 ## Status 
 
 This is a proof of concept, the code is horrible. I didn't intend to make this public yet, but I wanted to share it with a few people.
 Please open issues and PRs if you have any suggestions.
 
-Here is a video in action running completely locally (don't worry a dark mode is underway haha):
+## Features 
 
-https://github.com/nilsherzig/LLocalSearch/assets/72463901/d5ee9232-603e-4471-9e6b-b52ae46f7def
+- Completely local (no need for API keys)
+- Runs on "low end" LLM Hardware (demo video uses a 7b model)
+- User can see the progress of the agents and understand how the answer was found
+
+## Roadmap 
+
+- Separating "agent updates" / debug information from the final result (something like the [langsmith interface](https://docs.smith.langchain.com/)?)
+- Implement a stateful agent chain (so the user can ask follow up questions)
+- Code refactoring to provide a more solid base for future development and collaboration
 
 ## How it works 
 
@@ -25,7 +37,9 @@ https://github.com/nilsherzig/LLocalSearch/assets/72463901/d5ee9232-603e-4471-9e
 
 While this is happening, the user can see the progress of the agents steps in the frontend.
 
-## Running / Development
+## Self-hosting / Development
+
+Currently, both options are the same. I plan to package this into a single docker image for easier deployment.
 
 ### Requirements
 
