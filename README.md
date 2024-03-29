@@ -8,7 +8,7 @@ Please open issues and PRs if you have any suggestions.
 ## How it works 
 
 1. The user query is sent to server
-2. The server starts an agent chain
+2. The server starts an agent chain ("imagine LLMs taking with each other")
 3. The agent (in our case `starling-lm` running on Ollama) will process the query and select one of its tools
     - Websearch (using SearXNG) will scrape the top `n` results from the web (the agent will choose the search query). Remove all unnecessary information (like html tags) and store the result into a vector db
     - SearchVectorDB will search the vector db for the most similar results to the query
