@@ -49,27 +49,3 @@ git clone https://github.com/nilsherzig/LLocalsearch.git
 # build the containers and start the services
 make dev 
 ```
-
-## Roadmap
-
-### backend 
-
-- Automatic LLM download to Ollama if not present
-- Forced backlinks in final answer
-    - I have no idea how to do this, besides asking the LLM haha
-        - Force the search LLM to respond in JSON with links?
-            - Another round of formatting LLM after this to include these links into the final text?
-- Persistent user accounts
-    - add your own files 
-- select splitter values based on complexity of the question
-    - broad vs narrow
-
-### interface
-
-- CLI version
-- "tree view" for actions 
-- different LLM backends (like OpenAI or Anthropic)
-    - settings table for different models
-- Ollama model select dropdown 
-    - would require a lot of other values to be exposed to the UI
-- render latex
