@@ -64,4 +64,5 @@ git clone https://github.com/nilsherzig/LLocalsearch.git
 # make sure to check the env vars inside the compose file
 # build the containers and start the services
 make dev 
+# make dev will start the frontend on port 3000. Both front and backend will hot reload on code changes. 
 ```
