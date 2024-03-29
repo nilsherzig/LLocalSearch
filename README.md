@@ -42,7 +42,7 @@ Included in the compose file are
 - SearXNG (meta search engine used by the agent chain)
 - Redis (for caching search results)
 
-```
+```bash
 git clone https://github.com/nilsherzig/LLocalsearch.git
 # make sure to check the env vars inside the compose file
 # build the containers and start the services
