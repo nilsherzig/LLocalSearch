@@ -35,7 +35,7 @@ Included in the compose file are
 - Redis (for caching search results)
 
 ```
-git clone https://github.com/nilsherzig/LocalSearchUI.git
+git clone https://github.com/nilsherzig/LLocalsearch.git
 # make sure to check the env vars inside the compose file
 # build the containers and start the services
 make dev 
