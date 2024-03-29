@@ -6,11 +6,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     environment:
+      # change these
+      - OLLAMA_URL=http://192.168.0.109:11434 # the ip / url of YOUR Ollama server
+      - OLLAMA_MODEL_NAME=eramax/starling-lm-7b-beta:q6 # the name of the model on YOUR Ollama server which will be used
+
+      # no need to change these
       - CHROMA_DB_URL=http://chromadb:8000
-      - OLLAMA_URL=http://192.168.0.109:11434
       - SEARXNG_DOMAIN=http://searxng:8080
       # - OPENAI_API_KEY=${OPENAI_API_KEY} # not used at the moment (change the llm provider inside the agentChain.go)
-      - OLLAMA_MODEL_NAME=eramax/starling-lm-7b-beta:q6
     networks:
       - llm_network_dev
 
