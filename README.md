@@ -5,7 +5,9 @@
 This is a proof of concept, the code is horrible. I didn't intend to make this public yet, but I wanted to share it with a few people.
 Please open issues and PRs if you have any suggestions.
 
-![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/7f802b31-ba10-4335-9d2d-061addf0f05e)
+Here is a video in aciton (dont worry a darkmode is underway haha):
+
+https://github.com/nilsherzig/LLocalSearch/assets/72463901/d5ee9232-603e-4471-9e6b-b52ae46f7def
 
 ## How it works 
 
