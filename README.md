@@ -8,6 +8,8 @@ Here is a video of it in action, running completely locally (don't worry I'm wor
 
 https://github.com/nilsherzig/LLocalSearch/assets/72463901/d5ee9232-603e-4471-9e6b-b52ae46f7def
 
+https://github.com/nilsherzig/LLocalSearch/assets/72463901/a502adfa-2853-4716-8557-2905377d7c75
+
 ## Status 
 
 This is a proof of concept, the code is horrible. I didn't intend to make this public yet, but I wanted to share it with a few people.
