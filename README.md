@@ -30,9 +30,10 @@ While this is happening, the user can see the progress of the agents steps in th
 ### Requirements
 
 - A running [Ollama](https://ollama.com/) server somewhere in your network
-    - a model named `search:latest` 
+    - an LLM on Ollama 
         - (I recommend `hermes-2-pro-mistral` or `starling-lm-7b-beta`)
-    - `all-minilm` for embeddings
+        - Change the model name (used by the search) in the docker-compose file environment variables
+    - the `all-minilm` model for embeddings
 - Docker Compose
 
 Included in the compose file are 
