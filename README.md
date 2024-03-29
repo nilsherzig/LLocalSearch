@@ -5,6 +5,8 @@
 This is a proof of concept, the code is horrible. I didn't intend to make this public yet, but I wanted to share it with a few people.
 Please open issues and PRs if you have any suggestions.
 
+![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/7f802b31-ba10-4335-9d2d-061addf0f05e)
+
 ## How it works 
 
 1. The user query is sent to server
