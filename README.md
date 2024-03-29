@@ -1,4 +1,4 @@
-# LLM search engine
+# LLocalSearch
 
 ## Status 
 
