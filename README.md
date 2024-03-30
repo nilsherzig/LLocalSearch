@@ -67,4 +67,6 @@ make dev
 # running "make upgrade" will stop all containers, pull the latest code and restart the containers
 ```
 
+If you don't have `make` installed, you can run the commands inside the Makefile manually.
+
 Now you should be able to access the frontend on [http://localhost:3000](http://localhost:3000). All other services are not exposed to the outside world.
