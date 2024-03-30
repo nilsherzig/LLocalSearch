@@ -8,7 +8,7 @@
 >
 	{#if showLogs}
 		<span title="hide logs">
-			<button on:click={() => (showLogs = false)} class="p-2" title="hide logs">
+			<button on:click={() => (showLogs = false)} class="p-2">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
