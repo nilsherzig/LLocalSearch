@@ -4,9 +4,10 @@
 
 This is a completely locally running meta search engine using LLM Agents. The user can ask a question and the system will use a chain of LLMs to find the answer. The user can see the progress of the agents and the final answer. No OpenAI or Google API keys are needed.
 
-Here is a video of it in action, running completely locally (don't worry I'm working on a dark mode):
+Here is a video of it in action, running completely locally:
 
-https://github.com/nilsherzig/LLocalSearch/assets/72463901/271a4b72-e8fc-44ac-b276-b74f55753486
+https://github.com/nilsherzig/LLocalSearch/assets/72463901/e22a2578-3847-43fa-8317-2af514aa90d7
+
 
 ## Status 
 
