@@ -41,7 +41,7 @@
 			placeholder="Ask me something about llamas..."
 		></textarea>
 		<button
-			class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:shadow hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8"
+			class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8"
 			type="submit"
 			on:click={toggleChat}
 		>

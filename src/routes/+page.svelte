@@ -186,9 +186,9 @@
 		<div class="flex flex-row">
 			<ToggleLogsButton bind:showLogs></ToggleLogsButton>
 			<div
-				class="hover:bg-stone-300 text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer"
+				class="active:bg-stone-300 text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer"
 			>
-				<div class="hover:rotate-90 p-2 transition-all">
+				<div class="hover:rotate-12 p-2 transition-all">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
