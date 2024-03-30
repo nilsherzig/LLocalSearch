@@ -45,9 +45,9 @@ Currently, both options are the same. I plan to package this into a single docke
 
 - A running [Ollama](https://ollama.com/) server somewhere in your network
     - an LLM on Ollama 
-        - (I recommend `hermes-2-pro-mistral` or `starling-lm-7b-beta`)
+        - (I recommend `ollama pull eramax/starling-lm-7b-beta:q6`)
         - You can change the model name (used by the search) in the `docker-compose.dev.yaml` file by changing the environment variable `OLLAMA_MODEL_NAME`
-    - the `all-minilm` model for embeddings
+    - the `ollama pull all-minilm` model for embeddings 
 - Docker Compose
 - Make (optional)
 
