@@ -46,9 +46,10 @@ Currently, both options are the same. I plan to package this into a single docke
 - A running [Ollama](https://ollama.com/) server somewhere in your network
     - an LLM on Ollama 
         - (I recommend `hermes-2-pro-mistral` or `starling-lm-7b-beta`)
-        - Change the model name (used by the search) in the docker-compose file environment variables
+        - You can change the model name (used by the search) in the `docker-compose.dev.yaml` file by changing the environment variable `OLLAMA_MODEL_NAME`
     - the `all-minilm` model for embeddings
 - Docker Compose
+- Make (optional)
 
 Included in the compose file are 
 - search backend (based on the Go Langchain library)
