@@ -70,3 +70,5 @@ make dev
 # or use "make run" to detach the containers (and use "make stop" to stop them)
 # running "make upgrade" will stop all containers, pull the latest code and restart the containers
 ```
+
+Now you should be able to access the frontend on [http://localhost:3000](http://localhost:3000). All other services are not exposed to the outside world.
