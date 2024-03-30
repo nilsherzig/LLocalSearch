@@ -76,7 +76,6 @@
 			stepLevel = 0;
 			removeLevelNext = false;
 			addLevelNext = false;
-			logs = [];
 			return;
 		}
 
@@ -215,7 +214,7 @@
 	</div>
 </div>
 <div
-	class="absolute h-10 top-0 w-full bg-gradient-to-b to-transparent from-stone-200 dark:from-stone-950 rounded transition-all"
+	class="absolute top-0 w-full bg-gradient-to-b to-transparent from-stone-200 dark:from-stone-950 rounded transition-all"
 >
 	<div class="flex pt-8 px-8 justify-between">
 		<div></div>
