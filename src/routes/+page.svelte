@@ -2,10 +2,11 @@
 	import { fade, fly } from 'svelte/transition';
 	import type { LogElement } from '$lib/types/types';
 	import { StepType } from '$lib/types/types';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import LogItem from '$lib/log_item.svelte';
 	import BottomBar from '$lib/bottom_bar.svelte';
 	import ToggleLogsButton from '$lib/toggle_logs_button.svelte';
+	import ToggleDarkmodeButton from '$lib/toggle_darkmode_button.svelte';
 
 	let eventSource: EventSource | null = null;
 	let prompt = '';
@@ -32,6 +33,38 @@
 	let addLevelNext = false;
 
 	let showLogs = false;
+	let isDarkMode: boolean;
+
+	function changeDarkMode(isDarkMode: boolean) {
+		if (typeof window === 'undefined') return;
+		if (isDarkMode === undefined) {
+			isDarkMode =
+				localStorage.theme === 'dark' ||
+				(!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+		}
+		if (isDarkMode) {
+			document.documentElement.classList.add('dark');
+			localStorage.theme = 'dark';
+		} else {
+			document.documentElement.classList.remove('dark');
+			localStorage.theme = 'light';
+		}
+	}
+
+	$: changeDarkMode(isDarkMode);
+
+	onMount(() => {
+		if (
+			localStorage.theme === 'dark' ||
+			(!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
+		) {
+			document.documentElement.classList.add('dark');
+			isDarkMode = true;
+		} else {
+			document.documentElement.classList.remove('dark');
+			isDarkMode = false;
+		}
+	});
 
 	// Establish a connection to the server-sent events endpoint
 	function toggleChat() {
@@ -43,6 +76,7 @@
 			stepLevel = 0;
 			removeLevelNext = false;
 			addLevelNext = false;
+			logs = [];
 			return;
 		}
 
@@ -55,13 +89,13 @@
 			let url = '/api?prompt=' + prompt;
 			prompt = '';
 			eventSource = new EventSource(url);
-			console.log(eventSource);
+			// console.log(eventSource);
 
 			eventSource.onmessage = (event: MessageEvent) => {
 				let log: LogElement = JSON.parse(event.data);
-				if (!log.stream) {
-					console.log(log);
-				}
+				// if (!log.stream) {
+				// 	// console.log(log);
+				// }
 				if (removeLevelNext) {
 					stepLevel -= 1;
 					removeLevelNext = false;
@@ -98,7 +132,7 @@
 						currentParent = lastParent;
 						removeLevelNext = true;
 					}
-					console.log(stepLevel);
+					// console.log(stepLevel);
 					// console.log(currentParent);
 				}
 
@@ -138,14 +172,14 @@
 
 <svelte:head>
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="true" />
 	<link
 		href="https://fonts.googleapis.com/css2?family=Vollkorn:ital,wght@0,400..900;1,400..900&display=swap"
 		rel="stylesheet"
 	/>
 </svelte:head>
 
-<div class="w-screen h-screen flex flex-col">
+<div class="w-screen h-screen flex flex-col transition-all">
 	<div class="px-2 flex items-center flex-col h-full overflow-scroll">
 		<div class="py-24 align-middle">
 			{#if showExamplePrompts}
@@ -153,7 +187,7 @@
 					{#each examplePrompts as examplePrompt}
 						<div class="max-w-prose self-center">
 							<button
-								class="bg-stone-50 text-stone-700 py-2 px-6 rounded-lg shadow shadow-stone-300 border-stone-300 border-2 hover:border-stone-400 transition-all"
+								class="bg-stone-50 text-stone-700 py-2 px-6 rounded-lg shadow border-stone-300 border-2 hover:border-stone-400 transition-all dark:bg-stone-900 dark:border-stone-700 dark:text-stone-400 dark:hover:border-stone-500"
 								tabindex="-1"
 								on:click={() => {
 									prompt = examplePrompt;
@@ -180,11 +214,14 @@
 		</div>
 	</div>
 </div>
-<div class="absolute h-10 top-0 w-full bg-gradient-to-b to-transparent from-stone-200 rounded">
-	<div class="flex pt-8 px-8 justify-between bg-gradient-to-b from-stone-100 to-transparent">
+<div
+	class="absolute h-10 top-0 w-full bg-gradient-to-b to-transparent from-stone-200 dark:from-stone-950 rounded transition-all"
+>
+	<div class="flex pt-8 px-8 justify-between">
 		<div></div>
 		<div class="flex flex-row">
 			<ToggleLogsButton bind:showLogs></ToggleLogsButton>
+			<ToggleDarkmodeButton bind:isDarkMode></ToggleDarkmodeButton>
 			<!-- <div -->
 			<!-- 	class="active:bg-stone-300 text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer" -->
 			<!-- > -->
@@ -213,13 +250,19 @@
 		</div>
 	</div>
 </div>
-<div class="absolute bottom-0 w-full bg-gradient-to-t to-transparent from-stone-200 rounded">
+<div
+	class="absolute bottom-0 w-full bg-gradient-to-t to-transparent from-stone-200 rounded dark:from-stone-950 transition-all"
+>
 	<BottomBar bind:prompt {toggleChat}></BottomBar>
 </div>
 
 <style lang="postcss">
 	:global(html) {
 		background-color: theme(colors.stone.200);
+		font-family: 'Vollkorn', serif;
+	}
+	:global(html.dark) {
+		background-color: theme(colors.stone.950);
 		font-family: 'Vollkorn', serif;
 	}
 </style>
