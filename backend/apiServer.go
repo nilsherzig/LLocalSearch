@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/nilsherzig/localLLMSearch/utils"
@@ -41,7 +42,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	// if maxIterations == "" {
 	// 	maxIterations = "50"
 	// }
-	maxIterations := "10"
+	maxIterations := os.Getenv("MAX_ITERATIONS")
 
 	asInt, err := strconv.Atoi(maxIterations)
 	if err != nil {
