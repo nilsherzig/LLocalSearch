@@ -67,4 +67,6 @@ git clone https://github.com/nilsherzig/LLocalsearch.git
 # build the containers and start the services
 make dev 
 # make dev will start the frontend on port 3000. Both front and backend will hot reload on code changes. 
+# or use "make run" to detach the containers (and use "make stop" to stop them)
+# running "make upgrade" will stop all containers, pull the latest code and restart the containers
 ```
