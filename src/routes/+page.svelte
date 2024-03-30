@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fade, fly } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import type { LogElement } from '$lib/types/types';
 	import { StepType } from '$lib/types/types';
 	import { onDestroy, onMount } from 'svelte';
@@ -21,7 +21,6 @@
 		'whats up with the drama around apple and progressive web apps?'
 	];
 
-	let buttonText = 'Search';
 	let lastElemWasStream = false;
 
 	let logs: LogElement[] = [];
@@ -72,10 +71,10 @@
 		if (eventSource !== null) {
 			eventSource.close();
 			eventSource = null;
-			buttonText = 'Search';
 			stepLevel = 0;
 			removeLevelNext = false;
 			addLevelNext = false;
+			logs = [];
 			return;
 		}
 
@@ -83,7 +82,6 @@
 		if (eventSource === null) {
 			// clear logs
 			logs = [];
-			buttonText = 'Stop';
 			// let url = 'http://localhost:8080/stream?prompt=' + prompt;
 			let url = '/api?prompt=' + prompt;
 			prompt = '';

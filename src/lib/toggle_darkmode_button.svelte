@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { draw } from 'svelte/transition';
 	export let isDarkMode: boolean;
-	$: console.log('button', isDarkMode);
 </script>
 
 <div
