@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { type LogElement, StepType } from '$lib/types/types';
 	import { onMount } from 'svelte';
-	import DropdownButton from './dropdown_button.svelte';
 	import { marked } from 'marked';
 	export let logElement: LogElement;
 	export let isCurrentElement: boolean;
+	export let showLogs: boolean;
 
 	let collapsed = false;
 	if (!isCurrentElement) {
@@ -40,7 +40,31 @@
 		class="break-words overflow-wrap"
 	>
 		<div class="max-w-prose">
-			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError}
+			{#if showLogs == false}
+				{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError}
+					<div
+						id="level-{logElement.stepLevel}"
+						class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-500 border-2"
+					>
+						<span>{logElement.message}</span>
+					</div>
+				{:else if logElement.stepType == StepType.HandleFinalAnswer}
+					<div
+						class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-950 border-stone-300 border-2"
+					>
+						<article class="p-2 prose prose-stone">
+							{@html marked.parse(logElement.message)}
+						</article>
+					</div>
+				{:else if logElement.stream}
+					<div
+						class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-stone-300 border-2"
+					>
+						<span>{logElement.message}</span>
+					</div>
+				{/if}
+				<!-- show all messages -->
+			{:else if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError}
 				<div
 					id="level-{logElement.stepLevel}"
 					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-500 border-2"
@@ -60,16 +84,14 @@
 					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-stone-300 border-2 flex justify-between"
 				>
 					<span>{logElement.message}</span>
-					<!-- <DropdownButton collapsed /> -->
 				</div>
 			{:else if logElement.stepType == StepType.HandleAgentAction}
-				<div class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600">
+				<div
+					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-stone-300 border-2"
+				>
 					<span>{logElement.message}</span>
 				</div>
 			{:else if logElement.stepType == StepType.HandleChainStart}
-				<!-- <div class="rounded-lg mt-8 bg-stone-200 text-stone-600"> -->
-				<!-- 	<span>{logElement.message.slice(0, 30)}...</span> -->
-				<!-- </div> -->
 				<div
 					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-700 border-stone-300 border-2 flex justify-between"
 				>
