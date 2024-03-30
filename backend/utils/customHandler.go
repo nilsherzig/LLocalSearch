@@ -171,7 +171,15 @@ func (l CustomHandler) HandleAgentAction(_ context.Context, action schema.AgentA
 }
 
 func (l CustomHandler) HandleAgentFinish(_ context.Context, finish schema.AgentFinish) {
-	l.LogDebug(fmt.Sprintf("Agent finished with: %v", finish))
+	finishJson, err := json.Marshal(finish)
+	if err != nil {
+		fmt.Println("Error marshalling finish:", err)
+	}
+	l.OutputChan <- HttpJsonStreamElement{
+		Message:  string(finishJson),
+		Stream:   false,
+		StepType: StepHandleAgentFinish,
+	}
 }
 
 func (l CustomHandler) HandleRetrieverStart(_ context.Context, query string) {
