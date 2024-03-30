@@ -6,11 +6,7 @@ This is a completely locally running meta search engine using LLM Agents. The us
 
 Here is a video of it in action, running completely locally (don't worry I'm working on a dark mode):
 
-
 https://github.com/nilsherzig/LLocalSearch/assets/72463901/271a4b72-e8fc-44ac-b276-b74f55753486
-
-
-https://github.com/nilsherzig/LLocalSearch/assets/72463901/a502adfa-2853-4716-8557-2905377d7c75
 
 ## Status 
 
