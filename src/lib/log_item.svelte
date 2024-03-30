@@ -58,7 +58,7 @@
 					</div>
 				{:else if logElement.stream}
 					<div
-						class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-stone-300 border-2"
+						class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-400 border-stone-300 border-2"
 					>
 						<span>{logElement.message}</span>
 					</div>
