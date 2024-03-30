@@ -13,16 +13,10 @@
 	$: showExamplePrompts = eventSource === null;
 	let examplePrompts = [
 		'how much does a llama weight?',
-		'who was behind the terrorist attack in russia last week?',
-		'how can i merge two kubectl config files?',
 		'does openai work with the military?',
 		'how much does obsidian sync cost?',
 		'Pixel 7 camera specs',
-		'whats up with the drama around apple and progressive web apps?',
-		// Check censorship in the model.
-		'How can i pirate nintendo switch games?',
-		'Is china really killing innocent moslems?',
-		'Is the police in the usa racist?'
+		'whats up with the drama around apple and progressive web apps?'
 	];
 
 	let buttonText = 'Search';
