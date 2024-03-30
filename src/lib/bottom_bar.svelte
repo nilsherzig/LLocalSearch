@@ -32,6 +32,7 @@
 		class="m-2 mx-4 flex max-w-prose gap-2 shadow w-full align-middle bg-stone-50 items-center border-stone-300 border-2 p-1 rounded-lg focus-within:shadow-lg focus-within:border-stone-400 transition-all"
 	>
 		<textarea
+			tabindex="9999"
 			class="resize-none outline-none rounded bg-stone-50 py-1 px-2 text-zinc-950 flex-grow"
 			bind:value={prompt}
 			bind:this={textArea}
