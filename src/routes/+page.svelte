@@ -257,9 +257,11 @@
 	:global(html) {
 		background-color: theme(colors.stone.200);
 		font-family: 'Vollkorn', serif;
+		transition: background-color 0.3s;
 	}
 	:global(html.dark) {
 		background-color: theme(colors.stone.950);
 		font-family: 'Vollkorn', serif;
+		transition: background-color 0.3s;
 	}
 </style>
