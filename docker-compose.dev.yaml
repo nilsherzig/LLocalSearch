@@ -61,8 +61,6 @@ services:
     networks:
       - searxng
       - llm_network_dev
-    ports:
-      - '8080:8080'
     volumes:
       - ./searxng:/etc/searxng:rw
     environment:
