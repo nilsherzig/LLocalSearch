@@ -14,7 +14,6 @@ services:
       - CHROMA_DB_URL=http://chromadb:8000
       - SEARXNG_DOMAIN=http://searxng:8080
       - MAX_ITERATIONS=30 # the maximum amount of iterations the agent will run to find your answer
-      # - OPENAI_API_KEY=${OPENAI_API_KEY} # not used at the moment (change the llm provider inside the agentChain.go)
     networks:
       - llm_network_dev
 
