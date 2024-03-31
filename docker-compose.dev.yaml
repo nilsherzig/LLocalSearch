@@ -6,14 +6,17 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     environment:
-      # change these
-      - OLLAMA_URL=http://192.168.0.109:11434 # the ip / url of YOUR Ollama server
-      - OLLAMA_MODEL_NAME=eramax/starling-lm-7b-beta:q6 # the name of the model on YOUR Ollama server which will be used
+      ##### change these
+      # the name of the model on YOUR Ollama server which will be used
+      - OLLAMA_MODEL_NAME=eramax/starling-lm-7b-beta:q6
+      # the ip / url of YOUR Ollama server
+      - OLLAMA_HOST=http://192.168.0.109:11434
 
-      # no need to change these
+      ##### no need to change these
       - CHROMA_DB_URL=http://chromadb:8000
       - SEARXNG_DOMAIN=http://searxng:8080
-      - MAX_ITERATIONS=30 # the maximum amount of iterations the agent will run to find your answer
+      # the maximum amount of iterations the agent will run to find your answer
+      - MAX_ITERATIONS=30
     networks:
       - llm_network_dev
 

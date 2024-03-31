@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/nilsherzig/localLLMSearch/llm_tools"
@@ -32,6 +33,20 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 			log.Printf("Recovered from panic: %v", r)
 		}
 	}()
+	// TODO: move this check into the agent chain, if switching model in interface becomes a thing
+
+	neededModels := []string{"all-minilm", os.Getenv("OLLAMA_MODEL_NAME")}
+	for _, modelName := range neededModels {
+		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
+			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
+			outputChan <- utils.HttpJsonStreamElement{
+				Message:  fmt.Sprintf("Model %s does not exist and could not be pulled: %s", modelName, err.Error()),
+				StepType: utils.StepHandleLlmError,
+				Stream:   false,
+			}
+			return err
+		}
+	}
 
 	// used to set the vector db namespace
 	startTime := time.Now()
