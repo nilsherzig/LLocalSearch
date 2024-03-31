@@ -45,10 +45,9 @@ Currently, both options are the same. I plan to package this into a single docke
 ### Requirements
 
 - A running [Ollama](https://ollama.com/) server somewhere in your network
-    - an LLM on Ollama 
-        - (I recommend `ollama pull eramax/starling-lm-7b-beta:q6`)
-        - You can change the model name (used by the search) in the `docker-compose.dev.yaml` file by changing the environment variable `OLLAMA_MODEL_NAME`
-    - the `ollama pull all-minilm` model for embeddings 
+    - set the `OLLAMA_HOST` environment variable in the `docker-compose.dev.yaml` file to the IP of your Ollama server
+    - set the `OLLAMA_MODEL_NAME` environment variable in the `docker-compose.dev.yaml` file to the model name you want to use
+        - LLocalSearch is tested with the `starling-lm-7b-beta` model and will pull this model by default
 - Docker Compose
 - Make (optional)
 
