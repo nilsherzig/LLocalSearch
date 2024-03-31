@@ -91,6 +91,8 @@ func (c WebSearch) Call(ctx context.Context, input string) (string, error) {
 			err := utils.DownloadWebsiteToVectorDB(ctx, apiResponse.Results[i].URL, c.SessionString)
 			if err != nil {
 				log.Printf("error from evaluator: %s", err.Error())
+				wg.Done()
+				return
 			}
 			ch, ok := c.CallbacksHandler.(utils.CustomHandler)
 			if ok {
