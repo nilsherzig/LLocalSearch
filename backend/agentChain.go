@@ -40,7 +40,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 
 	// llm, err := utils.NewGPT35()
 	// llm, err := utils.NewGPT4()
-	llm, err := utils.NewOllama()
+	llm, err := utils.NewOllamaLLM()
 	// llm, err :=
 	if err != nil {
 		log.Printf("Error creating new LLM: %v", err)

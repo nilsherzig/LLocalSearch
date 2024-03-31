@@ -47,7 +47,7 @@ func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) 
 		c.CallbacksHandler.HandleToolStart(ctx, input)
 	}
 
-	llm, err := utils.NewEmbeddingsLLM()
+	llm, err := utils.NewOllamaEmbeddingLLM()
 	if err != nil {
 		return "", err
 	}

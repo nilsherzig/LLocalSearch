@@ -5,25 +5,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tmc/langchaingo/llms/ollama"
-	"github.com/tmc/langchaingo/llms/openai"
 )
 
-func NewGPT35() (*openai.LLM, error) {
-	return openai.New(openai.WithModel("gpt-3.5-turbo-0125"))
-}
-
-func NewGPT4() (*openai.LLM, error) {
-	return openai.New(openai.WithModel("gpt-4-1106-preview"))
-}
-
-func NewEmbeddingsLLM() (*ollama.LLM, error) {
+func NewOllamaEmbeddingLLM() (*ollama.LLM, error) {
 	modelName := "all-minilm"
 	return newOllama(modelName)
 }
 
-func NewOllama() (*ollama.LLM, error) {
-	// modelName := "search:latest"
-	// modelName := "mistral:latest"
+func NewOllamaLLM() (*ollama.LLM, error) {
 	modelName := os.Getenv("OLLAMA_MODEL_NAME")
 	return newOllama(modelName)
 }

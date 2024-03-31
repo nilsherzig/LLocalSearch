@@ -18,7 +18,7 @@ import (
 )
 
 func saveToVectorDb(timeoutCtx context.Context, docs []schema.Document, sessionString string) error {
-	llm, err := NewEmbeddingsLLM()
+	llm, err := NewOllamaEmbeddingLLM()
 	if err != nil {
 		return err
 	}
