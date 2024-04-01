@@ -7,9 +7,11 @@ export type LogElement = {
     stepLevel: number;
     stepType: StepType;
     stream: boolean;
+    session: string;
 };
 
 export const enum StepType {
+    HandleNewSession = "HandleNewSession",
     HandleAgentAction = "HandleAgentAction",
     HandleAgentFinish = "HandleAgentFinish",
     HandleChainEnd = "HandleChainEnd",
@@ -26,6 +28,8 @@ export const enum StepType {
     HandleToolError = "HandleToolError",
     HandleToolStart = "HandleToolStart",
     HandleVectorFound = "HandleVectorFound",
+    HandleUserPrompt = "HandleUserPrompt",
+    HandleParseError = "HandleParseError",
 }
 
 export type Source = {

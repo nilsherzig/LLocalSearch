@@ -38,6 +38,13 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	clientQuery.Prompt = prompt
 
+	session := r.URL.Query().Get("session")
+	if prompt == "" {
+		http.Error(w, "session is required", http.StatusBadRequest)
+		return
+	}
+	clientQuery.Session = session
+
 	// maxIterations := r.URL.Query().Get("maxIterations")
 	// if maxIterations == "" {
 	// 	maxIterations = "50"

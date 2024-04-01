@@ -27,7 +27,7 @@ var usedLinks = make(map[string]bool)
 var _ tools.Tool = WebSearch{}
 
 func (c WebSearch) Description() string {
-	return `Usefull for searching the internet. The top results for your search query will be downloaded to your vector db.`
+	return `Usefull for searching the internet. You have to use this tool if the requested information is not in the chat. Its better to use this tool, than to guess. The top results for your search query will be downloaded to your vector db.`
 }
 
 func (c WebSearch) Name() string {

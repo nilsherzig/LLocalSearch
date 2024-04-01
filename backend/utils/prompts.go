@@ -3,7 +3,7 @@ package utils
 import "fmt"
 
 func ParsingErrorPrompt() string {
-	return "Parsing Error: Check your output and make sure it conforms, use the Action/Action Input syntax. Use `Final Answer: [Your last answer] if youre finished"
+	return "Parsing Error: Check your output and make sure it conforms to the format."
 }
 
 func FormatTextAsMArkdownPrompt(text string) string {
