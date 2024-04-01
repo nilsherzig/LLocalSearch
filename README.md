@@ -8,6 +8,9 @@ Here is a video of it in action, running completely locally (now with darkmode):
 
 https://github.com/nilsherzig/LLocalSearch/assets/72463901/e22a2578-3847-43fa-8317-2af514aa90d7
 
+Now with follow up quesions: 
+
+![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/9b5bcb39-eb9b-452f-b2c3-b06ecb772e2f)
 
 ## Status 
 
