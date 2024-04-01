@@ -6,17 +6,20 @@ type HttpJsonStreamElement struct {
 	Stream   bool     `json:"stream"`
 	StepType StepType `json:"stepType"`
 	Source   Source   `json:"source"`
+	Session  string   `json:"session"`
 }
 
 type ClientQuery struct {
 	Prompt        string `json:"prompt"`
 	MaxIterations int    `json:"maxIterations"`
 	ModelName     string `json:"modelName"`
+	Session       string `json:"session"`
 }
 
 type StepType string
 
 const (
+	StepHandleNewSession  StepType = "HandleNewSession"
 	StepHandleAgentAction StepType = "HandleAgentAction"
 	StepHandleAgentFinish StepType = "HandleAgentFinish"
 
@@ -42,6 +45,8 @@ const (
 
 	StepHandleRetriverStart StepType = "HandleRetriverStart"
 	StepHandleRetriverEnd   StepType = "HandleRetriverEnd"
+
+	StepHandleParseError StepType = "HandleParseError"
 )
 
 type Source struct {

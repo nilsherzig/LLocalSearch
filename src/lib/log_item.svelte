@@ -2,14 +2,9 @@
 	import { type LogElement, StepType } from '$lib/types/types';
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
+	export let sendMode: boolean;
 	export let logElement: LogElement;
-	export let isCurrentElement: boolean;
 	export let showLogs: boolean;
-
-	let collapsed = false;
-	if (!isCurrentElement) {
-		collapsed = true;
-	}
 
 	let scrollContainer: HTMLElement;
 	function scollToElement(elem: LogElement) {
@@ -17,6 +12,8 @@
 			return;
 		}
 		scrollContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		if (elem.stepType == StepType.HandleFinalAnswer) {
+		}
 	}
 
 	onMount(() => {
@@ -35,18 +32,21 @@
     w-full
     "
 >
-	<div
-		bind:this={scrollContainer}
-		id="level-{logElement.stepLevel}"
-		class="break-words overflow-wrap"
-	>
-		<div class="max-w-prose">
+	<div bind:this={scrollContainer} class="break-words overflow-wrap">
+		<div class="max-w-prose flex flex-col">
 			<!-- error -->
-			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError}
+			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError || logElement.stepType == StepType.HandleParseError}
 				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-500 border-2 dark:bg-stone-800 dark:text-stone-200"
+					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-600 border-2 dark:bg-stone-800 dark:text-stone-200"
 				>
 					<span>{logElement.message}</span>
+				</div>
+				<!-- user prompt -->
+			{:else if logElement.stepType == StepType.HandleUserPrompt}
+				<div
+					class="self-end rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-700 border-stone-400 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-400"
+				>
+					{logElement.message}
 				</div>
 				<!-- final answer -->
 			{:else if logElement.stepType == StepType.HandleFinalAnswer}
@@ -57,12 +57,13 @@
 						{@html marked.parse(logElement.message)}
 					</article>
 				</div>
-			{:else if logElement.stream}
-				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700"
-				>
-					<span>{logElement.message}</span>
-				</div>
+				<!-- stream message -->
+				<!-- {:else if logElement.stream} -->
+				<!-- 	<div -->
+				<!-- 		class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700 w-full" -->
+				<!-- 	> -->
+				<!-- 		<span>{logElement.message}</span> -->
+				<!-- 	</div> -->
 			{/if}
 			<!-- show all messages -->
 			{#if showLogs}

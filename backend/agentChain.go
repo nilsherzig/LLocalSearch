@@ -12,7 +12,7 @@ import (
 	"github.com/nilsherzig/localLLMSearch/utils"
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/chains"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/memory"
 	"github.com/tmc/langchaingo/tools"
 )
 
@@ -35,7 +35,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}()
 	// TODO: move this check into the agent chain, if switching model in interface becomes a thing
 
-	neededModels := []string{"all-minilm", os.Getenv("OLLAMA_MODEL_NAME")}
+	neededModels := []string{"all-minilm:v2", os.Getenv("OLLAMA_MODEL_NAME")}
 	for _, modelName := range neededModels {
 		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
 			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
@@ -48,9 +48,26 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		}
 	}
 
-	// used to set the vector db namespace
 	startTime := time.Now()
-	session := utils.GetSessionString()
+
+	// used to set the vector db namespace and chat memory
+	if userQuery.Session == "" {
+		userQuery.Session = utils.GetSessionString()
+	}
+	session := userQuery.Session
+
+	if sessions[session] == nil {
+		slog.Info("Creating new session", "session", session)
+		sessions[session] = memory.NewConversationBuffer()
+		memory.NewChatMessageHistory()
+		outputChan <- utils.HttpJsonStreamElement{
+			StepType: utils.StepHandleNewSession,
+			Session:  session,
+			Stream:   false,
+		}
+	}
+	mem := sessions[session]
+
 	slog.Info("Starting agent chain", "session", session, "userQuery", userQuery, "startTime", startTime)
 
 	// llm, err := utils.NewGPT35()
@@ -86,12 +103,14 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	executor, err := agents.Initialize(
 		llm,
 		agentTools,
-		agents.ZeroShotReactDescription,
+		agents.ConversationalReactDescription,
 		agents.WithParserErrorHandler(agents.NewParserErrorHandler(func(s string) string {
 			outputChan <- utils.HttpJsonStreamElement{
-				Message: fmt.Sprintf("Parsing Error. %s", s),
-				Stream:  false,
+				Message:  fmt.Sprintf("Parsing Error. %s", s),
+				StepType: utils.StepHandleParseError,
+				Stream:   false,
 			}
+			slog.Error("Parsing Error", "error", s)
 			return utils.ParsingErrorPrompt()
 		})),
 
@@ -99,6 +118,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		agents.WithCallbacksHandler(utils.CustomHandler{
 			OutputChan: outputChan,
 		}),
+		agents.WithMemory(mem),
 	)
 
 	if err != nil {
@@ -106,28 +126,26 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}
 
 	temp := 0.0
-
-	finalAnswer, err := chains.Run(ctx, executor, userQuery.Prompt, chains.WithTemperature(temp))
+	// prompt := fmt.Sprintf(`Answer the question. Use websearch if the answer is not in this chat. Question: %s`, userQuery.Prompt)
+	ans, err := chains.Run(ctx, executor, userQuery.Prompt, chains.WithTemperature(temp))
 	if err != nil {
 		return err
 	}
 
-	newAns, err := llm.Call(ctx, utils.FormatTextAsMArkdownPrompt(finalAnswer),
-		llms.WithTemperature(temp),
-		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			outputChan <- utils.HttpJsonStreamElement{
-				StepType: utils.StepHandleFinalAnswer,
-				Message:  string(chunk),
-				Stream:   true,
-			}
-			return nil
-		}),
-	)
+	messages, err := mem.ChatHistory.Messages(ctx)
 	if err != nil {
 		return err
 	}
-	_ = newAns
-	slog.Info("finished chain", "session", session, "duration", time.Since(startTime), "finalAnswer", newAns)
+	log.Printf("mem messages %v", messages)
 
+	outputChan <- utils.HttpJsonStreamElement{
+		Message:  ans,
+		StepType: utils.StepHandleFinalAnswer,
+		Stream:   false,
+	}
+
+	outputChan <- utils.HttpJsonStreamElement{
+		Close: true,
+	}
 	return nil
 }
