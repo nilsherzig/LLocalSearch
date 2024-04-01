@@ -37,7 +37,7 @@
 			<!-- error -->
 			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError || logElement.stepType == StepType.HandleParseError}
 				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-600 border-2 dark:bg-stone-800 dark:text-stone-200"
+					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-600 border-2 dark:bg-stone-800 dark:text-stone-200 mr-10"
 				>
 					<span>{logElement.message}</span>
 				</div>
@@ -51,19 +51,22 @@
 				<!-- final answer -->
 			{:else if logElement.stepType == StepType.HandleFinalAnswer}
 				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-950 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-700"
+					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-950 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-700 mr-10"
 				>
 					<article class="p-2 prose prose-stone dark:prose-invert">
 						{@html marked.parse(logElement.message)}
 					</article>
 				</div>
 				<!-- stream message -->
-				<!-- {:else if logElement.stream} -->
-				<!-- 	<div -->
-				<!-- 		class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700 w-full" -->
-				<!-- 	> -->
-				<!-- 		<span>{logElement.message}</span> -->
-				<!-- 	</div> -->
+			{:else if logElement.stream}
+				<div
+					class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700 mr-10"
+				>
+					<article class="p-2 prose prose-stone dark:prose-invert">
+						{@html marked.parse(logElement.message)}
+						<!-- <span>{logElement.message}</span> -->
+					</article>
+				</div>
 			{/if}
 			<!-- show all messages -->
 			{#if showLogs}

@@ -127,7 +127,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 
 	temp := 0.0
 	// prompt := fmt.Sprintf(`Answer the question. Use websearch if the answer is not in this chat. Question: %s`, userQuery.Prompt)
-	ans, err := chains.Run(ctx, executor, userQuery.Prompt, chains.WithTemperature(temp))
+	_, err = chains.Run(ctx, executor, userQuery.Prompt, chains.WithTemperature(temp), chains.WithRepetitionPenalty(1.5))
 	if err != nil {
 		return err
 	}
@@ -138,11 +138,11 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}
 	log.Printf("mem messages %v", messages)
 
-	outputChan <- utils.HttpJsonStreamElement{
-		Message:  ans,
-		StepType: utils.StepHandleFinalAnswer,
-		Stream:   false,
-	}
+	// outputChan <- utils.HttpJsonStreamElement{
+	// 	Message:  ans,
+	// 	StepType: utils.StepHandleFinalAnswer,
+	// 	Stream:   false,
+	// }
 
 	outputChan <- utils.HttpJsonStreamElement{
 		Close: true,

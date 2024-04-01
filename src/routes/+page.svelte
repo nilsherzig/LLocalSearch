@@ -81,7 +81,7 @@
 		showExamplePrompts = false;
 		let url = '/api?prompt=' + prompt + '&session=' + sessionString;
 		let newLogElement: LogElement = {
-			message: prompt,
+			message: `${prompt}`,
 			stepType: StepType.HandleUserPrompt
 		};
 		logs.push(newLogElement);
