@@ -9,12 +9,17 @@ services:
       ##### change these
       # the name of the model on YOUR Ollama server which will be used
       - OLLAMA_MODEL_NAME=knoopx/hermes-2-pro-mistral:7b-q8_0
+
       # the ip / url of YOUR Ollama server
       - OLLAMA_HOST=http://192.168.0.109:11434
 
       ##### no need to change these
+      # the url of the chroma db
       - CHROMA_DB_URL=http://chromadb:8000
+
+      # the url of the redis db
       - SEARXNG_DOMAIN=http://searxng:8080
+
       # the maximum amount of iterations the agent will run to find your answer
       - MAX_ITERATIONS=30
     networks:
