@@ -44,7 +44,7 @@
 				<!-- user prompt -->
 			{:else if logElement.stepType == StepType.HandleUserPrompt}
 				<div
-					class="self-end rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-700 border-stone-400 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-400"
+					class="self-end rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-700 border-stone-400 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-400 ml-10"
 				>
 					{logElement.message}
 				</div>

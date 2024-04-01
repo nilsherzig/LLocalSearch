@@ -19,7 +19,8 @@
 		'does openai work with the military?',
 		'how much does obsidian sync cost?',
 		'Pixel 7 camera specs',
-		'whats up with the drama around apple and progressive web apps?'
+		'whats up with the drama around apple and progressive web apps?',
+		'how much do OpenAI and Microsoft plan to spend on their new datacenter?'
 	];
 
 	let lastElemWasStream = false;

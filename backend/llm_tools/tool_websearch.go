@@ -22,12 +22,12 @@ type WebSearch struct {
 	SessionString    string
 }
 
-var usedLinks = make(map[string]bool)
+// var usedLinks = make(map[string]bool)
 
 var _ tools.Tool = WebSearch{}
 
 func (c WebSearch) Description() string {
-	return `Usefull for searching the internet. You have to use this tool if the requested information is not in the chat. Its better to use this tool, than to guess. The top results for your search query will be downloaded to your vector db.`
+	return `Usefull for searching the internet. You have to use this tool if you're not 100% certain. The top results for your search query will be downloaded to your vector db.`
 }
 
 func (c WebSearch) Name() string {
@@ -72,9 +72,9 @@ func (c WebSearch) Call(ctx context.Context, input string) (string, error) {
 	wg := sync.WaitGroup{}
 	counter := 0
 	for i := range apiResponse.Results {
-		if usedLinks[apiResponse.Results[i].URL] {
-			continue
-		}
+		// if usedLinks[apiResponse.Results[i].URL] {
+		// 	continue
+		// }
 
 		if counter > 10 {
 			break
@@ -102,7 +102,7 @@ func (c WebSearch) Call(ctx context.Context, input string) (string, error) {
 				}
 
 				ch.HandleSourceAdded(ctx, newSource)
-				usedLinks[apiResponse.Results[i].URL] = true
+				// usedLinks[apiResponse.Results[i].URL] = true
 			}
 			wg.Done()
 		}(i)

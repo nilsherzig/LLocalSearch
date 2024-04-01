@@ -126,8 +126,8 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}
 
 	temp := 0.0
-	// prompt := fmt.Sprintf(`Answer the question. Use websearch if the answer is not in this chat. Question: %s`, userQuery.Prompt)
-	_, err = chains.Run(ctx, executor, userQuery.Prompt, chains.WithTemperature(temp), chains.WithRepetitionPenalty(1.5))
+	prompt := fmt.Sprintf(`Answer the question. Use websearch if the answer is not in this chat. Dont make things up. Answer in markdown. You have to provide sources. Question: %s`, userQuery.Prompt)
+	_, err = chains.Run(ctx, executor, prompt, chains.WithTemperature(temp))
 	if err != nil {
 		return err
 	}
