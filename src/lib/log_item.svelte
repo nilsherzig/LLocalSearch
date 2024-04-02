@@ -2,7 +2,6 @@
 	import { type LogElement, StepType } from '$lib/types/types';
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
-	export let sendMode: boolean;
 	export let logElement: LogElement;
 	export let showLogs: boolean;
 
@@ -25,6 +24,16 @@
 	// 	scollToElement();
 	// }
 	$: scollToElement(logElement);
+	const renderer = {
+		link(href: string, title: string, text: string) {
+			const link = marked.Renderer.prototype.link.call(this, href, title, text);
+			return link.replace('<a', "<a target='_blank' rel='noopener noreferrer' ");
+		}
+	};
+
+	marked.use({
+		renderer
+	});
 </script>
 
 <div
