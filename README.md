@@ -33,16 +33,6 @@ Please open issues and PRs if you have any suggestions.
 
 Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get the most up to date idea.
 
-1. The user query is sent to server
-2. The server starts an agent chain ("imagine LLMs taking with each other")
-3. The agent (in our case `starling-lm` running on Ollama) will process the query and select one of its tools
-    - Websearch (using SearXNG) will scrape the top `n` results from the web (the agent will choose the search query). Remove all unnecessary information (like html tags) and store the result into a vector db
-    - SearchVectorDB will search the vector db for the most similar results to the query
-4. Step 3 will happen multiple times, with the agent choosing different tools and combining the results
-5. The final result is sent back to the user and displayed in the frontend
-
-While this is happening, the user can see the progress of the agents steps in the frontend.
-
 ## Self-hosting / Development
 
 Currently, both options are the same. I plan to package this into a single docker image for easier deployment.
@@ -52,7 +42,7 @@ Currently, both options are the same. I plan to package this into a single docke
 - A running [Ollama](https://ollama.com/) server somewhere in your network
     - set the `OLLAMA_HOST` environment variable in the `docker-compose.dev.yaml` file to the IP of your Ollama server
     - set the `OLLAMA_MODEL_NAME` environment variable in the `docker-compose.dev.yaml` file to the model name you want to use
-        - LLocalSearch is tested with the `starling-lm-7b-beta` model and will pull this model by default
+        - LLocalSearch is tested with the `hermes-2-pro-mistral` model and will pull this model by default
 - Docker Compose
 - Make (optional)
 
