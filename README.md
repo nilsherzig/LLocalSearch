@@ -31,6 +31,8 @@ Please open issues and PRs if you have any suggestions.
 
 ## How it works 
 
+Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get the most up to date idea.
+
 1. The user query is sent to server
 2. The server starts an agent chain ("imagine LLMs taking with each other")
 3. The agent (in our case `starling-lm` running on Ollama) will process the query and select one of its tools
