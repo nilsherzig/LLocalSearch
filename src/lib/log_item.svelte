@@ -46,21 +46,22 @@
 			<!-- error -->
 			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError || logElement.stepType == StepType.HandleParseError}
 				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-600 border-2 dark:bg-stone-800 dark:text-stone-200 mr-10"
+					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-600 border-2 dark:bg-stone-800 dark:text-stone-200"
 				>
 					<span>{logElement.message}</span>
 				</div>
 				<!-- user prompt -->
 			{:else if logElement.stepType == StepType.HandleUserPrompt}
+				<div class="w-full border-2 border-t-stone-300 dark:border-stone-800 mt-10 rounded"></div>
 				<div
-					class="self-end rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-700 border-stone-400 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-400 ml-10"
+					class="my-2 p-2 text-stone-700 dark:text-stone-200 dark:border-stone-400 font-bold text-lg"
 				>
 					{logElement.message}
 				</div>
 				<!-- final answer -->
 			{:else if logElement.stepType == StepType.HandleFinalAnswer}
 				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-950 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-700 mr-10"
+					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-950 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-700"
 				>
 					<article class="p-2 prose prose-stone dark:prose-invert">
 						{@html marked.parse(logElement.message)}
@@ -68,14 +69,19 @@
 				</div>
 				<!-- stream message -->
 			{:else if logElement.stream}
+				<!-- {#if logElement.message.includes('Action: WebSearch')} -->
+				<!-- 	searching the web -->
+				<!-- {:else if logElement.message.includes('Action: SearchVectorDB')} -->
+				<!-- 	searching vector db -->
+				<!-- {:else} -->
 				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700 mr-10"
+					class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700"
 				>
 					<article class="p-2 prose prose-stone dark:prose-invert">
 						{@html marked.parse(logElement.message)}
-						<!-- <span>{logElement.message}</span> -->
 					</article>
 				</div>
+				<!-- {/if} -->
 			{/if}
 			<!-- show all messages -->
 			{#if showLogs}

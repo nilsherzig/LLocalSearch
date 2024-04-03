@@ -7,13 +7,30 @@
 	import BottomBar from '$lib/bottom_bar.svelte';
 	import ToggleLogsButton from '$lib/toggle_logs_button.svelte';
 	import ToggleDarkmodeButton from '$lib/toggle_darkmode_button.svelte';
+	import ModelSwitchWindow from '$lib/model_switch_window.svelte';
+	import ToggleModelSwitch from '$lib/toggle_model_switch.svelte';
 
 	let eventSource: EventSource | null = null;
 	let prompt = '';
 	let sendMode = true;
 
-	let showExamplePrompts = true;
+	let showModelSwitchWindow = false;
+	let models: string[];
 
+	let currentModel: string;
+
+	$: setLocalStorage('currentModel', currentModel);
+
+	function setLocalStorage(key: string, value: string) {
+		if (typeof window === 'undefined') return;
+		if (value === undefined) {
+			return;
+		}
+		console.log('setting local storage', key, value);
+		localStorage.setItem(key, value);
+	}
+
+	let showExamplePrompts = true;
 	let examplePrompts = [
 		'how much does a llama weight?',
 		'does openai work with the military?',
@@ -26,9 +43,6 @@
 	let lastElemWasStream = false;
 
 	let logs: LogElement[] = [];
-
-	let removeLevelNext = false;
-	let addLevelNext = false;
 
 	let showLogs = false;
 	let isDarkMode: boolean;
@@ -53,6 +67,17 @@
 	$: changeDarkMode(isDarkMode);
 
 	onMount(() => {
+		fetch('/api/modellist')
+			.then((response) => response.json())
+			.then((data) => {
+				models = data;
+			});
+
+		if (localStorage.currentModel) {
+			currentModel = localStorage.currentModel;
+		} else {
+			currentModel = 'knoopx/hermes-2-pro-mistral:7b-q8_0'; // default model
+		}
 		if (
 			localStorage.theme === 'dark' ||
 			(!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -70,8 +95,6 @@
 			eventSource.close();
 		}
 		eventSource = null;
-		removeLevelNext = false;
-		addLevelNext = false;
 		logs = [];
 		sessionString = '';
 		showExamplePrompts = true;
@@ -80,7 +103,8 @@
 	// Establish a connection to the server-sent events endpoint
 	function sendPrompt() {
 		showExamplePrompts = false;
-		let url = '/api?prompt=' + prompt + '&session=' + sessionString;
+		let url =
+			'/api/stream?prompt=' + prompt + '&session=' + sessionString + '&modelname=' + currentModel;
 		let newLogElement: LogElement = {
 			message: `${prompt}`,
 			stepType: StepType.HandleUserPrompt
@@ -146,6 +170,7 @@
 	/>
 </svelte:head>
 
+<ModelSwitchWindow bind:models bind:showModelSwitchWindow bind:currentModel></ModelSwitchWindow>
 <div class="w-screen h-screen flex flex-col transition-all">
 	<div class="px-2 flex items-center flex-col h-full overflow-scroll">
 		<div class="py-24 align-middle">
@@ -167,33 +192,29 @@
 					{/each}
 				</div>
 			{/if}
-			{#each logs as log, index}
+			{#each logs as log}
 				<div in:fade>
-					<!-- {#if index == logs.length - 1} -->
-					<!-- 	<div> -->
-					<!-- 		<LogItem bind:sendMode logElement={log} isCurrentElement={true} bind:showLogs -->
-					<!-- 		></LogItem> -->
-					<!-- 	</div> -->
-					<!-- {:else} -->
-					<LogItem bind:sendMode logElement={log} bind:showLogs></LogItem>
+					<LogItem logElement={log} bind:showLogs></LogItem>
 				</div>
 			{/each}
 		</div>
 	</div>
 </div>
-<div
-	class="absolute top-0 w-full bg-gradient-to-b to-transparent from-stone-200 dark:from-stone-950 rounded transition-all"
->
-	<div class="flex pt-8 px-8 justify-between">
-		<div></div>
+<div class="absolute top-0 w-full rounded transition-all">
+	<div class="flex p-4 justify-between bg-stone-200 dark:bg-stone-950 transition-all">
+		<div>
+			<ToggleModelSwitch bind:currentModel bind:showModelSwitchWindow></ToggleModelSwitch>
+		</div>
 		<div class="flex flex-row">
 			<ToggleLogsButton bind:showLogs></ToggleLogsButton>
 			<ToggleDarkmodeButton bind:isDarkMode></ToggleDarkmodeButton>
 		</div>
 	</div>
+	<div class="bg-gradient-to-t from-transparent to-stone-200 dark:to-stone-950 h-4"></div>
 </div>
+
 <div
-	class="absolute bottom-0 w-full bg-gradient-to-t to-transparent from-stone-200 rounded dark:from-stone-950 transition-all"
+	class="absolute bottom-0 w-full transition-all bg-gradient-to-t from-stone-200 to-transparent dark:from-stone-950"
 >
 	<BottomBar bind:sendMode bind:prompt {sendPrompt} {resetChat}></BottomBar>
 </div>
@@ -202,11 +223,9 @@
 	:global(html) {
 		background-color: theme(colors.stone.200);
 		font-family: 'Vollkorn', serif;
-		transition: background-color 0.3s;
 	}
 	:global(html.dark) {
 		background-color: theme(colors.stone.950);
 		font-family: 'Vollkorn', serif;
-		transition: background-color 0.3s;
 	}
 </style>

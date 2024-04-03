@@ -13,16 +13,11 @@ import (
 
 func NewOllamaEmbeddingLLM() (*ollama.LLM, error) {
 	modelName := "all-minilm"
-	return newOllama(modelName)
+	return NewOllama(modelName)
 }
 
-func NewOllamaLLM() (*ollama.LLM, error) {
-	modelName := os.Getenv("OLLAMA_MODEL_NAME")
-	return newOllama(modelName)
-}
-
-func newOllama(modelName string) (*ollama.LLM, error) {
-	return ollama.New(ollama.WithModel(modelName), ollama.WithServerURL(os.Getenv("OLLAMA_HOST")), ollama.WithRunnerNumCtx(10000))
+func NewOllama(modelName string) (*ollama.LLM, error) {
+	return ollama.New(ollama.WithModel(modelName), ollama.WithServerURL(os.Getenv("OLLAMA_HOST")), ollama.WithRunnerNumCtx(16000))
 }
 
 func GetSessionString() string {
@@ -39,21 +34,33 @@ func CheckIfModelExistsOrPull(modelName string) error {
 	return nil
 }
 
-func CheckIfModelExists(modelName string) error {
+func GetOllamaModelList() ([]string, error) {
 	client, err := api.ClientFromEnvironment()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	models, err := client.List(context.Background())
 	if err != nil {
+		return nil, err
+	}
+	modelNames := make([]string, 0)
+	for _, model := range models.Models {
+		modelNames = append(modelNames, model.Name)
+	}
+	return modelNames, nil
+}
+
+func CheckIfModelExists(requestName string) error {
+	modelNames, err := GetOllamaModelList()
+	if err != nil {
 		return err
 	}
-	for _, model := range models.Models {
-		if model.Name == modelName {
+	for _, mn := range modelNames {
+		if requestName == mn {
 			return nil
 		}
 	}
-	return fmt.Errorf("Model %s does not exist", modelName)
+	return fmt.Errorf("Model %s does not exist", requestName)
 }
 
 func OllamaPullModel(modelName string) error {

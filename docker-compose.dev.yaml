@@ -7,9 +7,6 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       ##### change these
-      # the name of the model on YOUR Ollama server which will be used
-      - OLLAMA_MODEL_NAME=knoopx/hermes-2-pro-mistral:7b-q8_0
-
       # the ip / url of YOUR Ollama server
       - OLLAMA_HOST=http://192.168.0.109:11434
 

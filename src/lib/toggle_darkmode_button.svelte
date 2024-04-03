@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { draw } from 'svelte/transition';
+	import TopButton from './top_button.svelte';
 	export let isDarkMode: boolean;
 </script>
 
-<div
-	class="active:bg-stone-300 active:shadow-inner text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer transition-all dark:text-stone-500 dark:hover:text-stone-200 dark:active:bg-stone-700"
->
+<TopButton>
 	{#if isDarkMode}
 		<span title="turn light on">
 			<button on:click={() => (isDarkMode = false)} class="p-2">
@@ -47,4 +46,4 @@
 			</button>
 		</span>
 	{/if}
-</div>
+</TopButton>

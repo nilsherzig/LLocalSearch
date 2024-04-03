@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/nilsherzig/localLLMSearch/llm_tools"
@@ -35,7 +34,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}()
 	// TODO: move this check into the agent chain, if switching model in interface becomes a thing
 
-	neededModels := []string{"all-minilm:v2", os.Getenv("OLLAMA_MODEL_NAME")}
+	neededModels := []string{"all-minilm:v2", userQuery.ModelName}
 	for _, modelName := range neededModels {
 		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
 			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
@@ -72,8 +71,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 
 	// llm, err := utils.NewGPT35()
 	// llm, err := utils.NewGPT4()
-	llm, err := utils.NewOllamaLLM()
-	// llm, err :=
+	llm, err := utils.NewOllama(userQuery.ModelName)
 	if err != nil {
 		log.Printf("Error creating new LLM: %v", err)
 		return err
@@ -126,7 +124,11 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}
 
 	temp := 0.0
-	prompt := fmt.Sprintf(`Answer the question. Use websearch if the answer is not in this chat. Dont make things up. Answer in markdown. You have to provide sources. Question: %s`, userQuery.Prompt)
+	prompt := fmt.Sprintf(`
+    1. Fromat your answer (after AI:) in markdown. 
+    2. You HAVE to use your tools to answer questions. 
+    3. You have to provide sources / links.
+    Question: %s`, userQuery.Prompt)
 	_, err = chains.Run(ctx, executor, prompt, chains.WithTemperature(temp))
 	if err != nil {
 		return err

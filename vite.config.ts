@@ -8,7 +8,7 @@ export default defineConfig({
             '/api': {
                 target: 'http://backend-dev:8080',
                 changeOrigin: true,
-                rewrite: path => path.replace(/^\/api/, '/stream') // proxy request to go backend
+                rewrite: path => path.replace(/^\/api/, '/') // proxy request to go backend
             }
         }
     }

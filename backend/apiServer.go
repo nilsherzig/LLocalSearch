@@ -45,10 +45,13 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	clientQuery.Session = session
 
-	// maxIterations := r.URL.Query().Get("maxIterations")
-	// if maxIterations == "" {
-	// 	maxIterations = "50"
-	// }
+	modelname := r.URL.Query().Get("modelname")
+	if prompt == "" {
+		http.Error(w, "modelname is required", http.StatusBadRequest)
+		return
+	}
+	clientQuery.ModelName = modelname
+
 	maxIterations := os.Getenv("MAX_ITERATIONS")
 
 	asInt, err := strconv.Atoi(maxIterations)
@@ -98,9 +101,37 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func modellistHandler(w http.ResponseWriter, r *http.Request) {
+	utils.GetOllamaModelList()
+	// Set CORS headers
+	setCorsHeaders(w)
+
+	// Handle pre-flight CORS request
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	models, err := utils.GetOllamaModelList()
+	if err != nil {
+		http.Error(w, "Error getting model list", http.StatusInternalServerError)
+		return
+	}
+
+	jsonModels, err := json.Marshal(models)
+	if err != nil {
+		http.Error(w, "Error marshalling model list", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonModels)
+}
+
 func StartApiServer() {
 	// Register the handler function
 	http.HandleFunc("/stream", streamHandler)
+	http.HandleFunc("/modellist", modellistHandler)
 
 	// Start the HTTP server
 	fmt.Println("Server started at http://localhost:8080")
