@@ -10,7 +10,8 @@ https://github.com/nilsherzig/LLocalSearch/assets/72463901/e22a2578-3847-43fa-83
 
 Now with follow up quesions: 
 
-![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/9b5bcb39-eb9b-452f-b2c3-b06ecb772e2f)
+![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/9f6497aa-8047-4d11-9a12-66aff65d3faa)
+
 
 ## Status 
 
