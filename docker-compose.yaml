@@ -1,10 +1,7 @@
 services:
   backend:
-    volumes:
-      - ./backend/:/app/
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
+    container_name: backend
+    image: nilsherzig/llocalsearch-backend:latest
     environment:
       ##### change these
       # the ip / url of YOUR Ollama server
@@ -20,28 +17,23 @@ services:
       # the maximum amount of iterations the agent will run to find your answer
       - MAX_ITERATIONS=30
     networks:
-      - llm_network_dev
+      - llm_network
 
   frontend:
     depends_on:
       - backend
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ./:/app/
+    container_name: frontend
+    image: nilsherzig/llocalsearch-frontend:latest
     ports:
-      - '3000:5173'
+      - '3000:4173'
     networks:
-      - llm_network_dev
+      - llm_network
 
   chromadb:
+    container_name: chromadb
     image: chromadb/chroma
     networks:
-      - llm_network_dev
-    # attach: false
-    # logging:
-    #   driver: none
+      - llm_network
 
   redis:
     container_name: redis
@@ -63,7 +55,7 @@ services:
     image: docker.io/searxng/searxng:latest
     networks:
       - searxng
-      - llm_network_dev
+      - llm_network
     volumes:
       - ./searxng:/etc/searxng:rw
     environment:
@@ -81,7 +73,7 @@ services:
         max-file: '1'
 
 networks:
-  llm_network_dev:
+  llm_network:
     driver: bridge
   searxng:
     ipam:

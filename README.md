@@ -2,72 +2,65 @@
 
 ## What it is
 
-This is a completely locally running meta search engine using LLM Agents. The user can ask a question and the system will use a chain of LLMs to find the answer. The user can see the progress of the agents and the final answer. No OpenAI or Google API keys are needed.
+This is a completely locally running search engine using LLM Agents. The user can ask a question and the system will use a chain of LLMs to find the answer. The user can see the progress of the agents and the final answer. No OpenAI or Google API keys are needed.
 
-Here is a video of it in action, running completely locally (now with darkmode):
-
-https://github.com/nilsherzig/LLocalSearch/assets/72463901/e22a2578-3847-43fa-8317-2af514aa90d7
-
-Now with follow up quesions: 
+Now with follow-up questions: 
 
 ![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/9f6497aa-8047-4d11-9a12-66aff65d3faa)
 
-Searching itself:
+## Features 
 
-![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/90bab226-944d-4251-ba27-1e4a1fd76fbb)
-
+-  🕵️ Completely local (no need for API keys)
+- 💸 Runs on "low end" LLM Hardware (demo video uses a 7b model)
+- 🤓 Progress logs, allowing for a better understanding of the search process
+- 🤔 Follow-up questions
+- 📱 Mobile friendly interface
+- 🚀 Fast and easy to deploy with Docker Compose
+- 🌐 Web interface, allowing for easy access from any device
+- 💮 Handcrafted UI with light and dark mode
 
 ## Status 
 
-This is a proof of concept, the code is horrible. I didn't intend to make this public yet, but I wanted to share it with a few people.
-Please open issues and PRs if you have any suggestions.
-
-## Features 
-
-- Completely local (no need for API keys)
-- Runs on "low end" LLM Hardware (demo video uses a 7b model)
-- User can see the progress of the agents and understand how the answer was found
-
-## Roadmap 
-
-- Separating "agent updates" / debug information from the final result (something like the [langsmith interface](https://docs.smith.langchain.com/)?)
-- Implement a stateful agent chain (so the user can ask follow up questions)
-- Code refactoring to provide a more solid base for future development and collaboration
+This project is still in its very early days. Expect some bugs. 
 
 ## How it works 
 
-Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get the most up to date idea.
+Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get the most up-to-date idea.
 
-## Self-hosting / Development
-
-Currently, both options are the same. I plan to package this into a single docker image for easier deployment.
+## Self-hosting & Development
 
 ### Requirements
 
-- A running [Ollama](https://ollama.com/) server somewhere in your network
-    - set the `OLLAMA_HOST` environment variable in the `docker-compose.dev.yaml` file to the IP of your Ollama server
-    - set the `OLLAMA_MODEL_NAME` environment variable in the `docker-compose.dev.yaml` file to the model name you want to use
-        - LLocalSearch is tested with the `hermes-2-pro-mistral` model and will pull this model by default
+- A running [Ollama](https://ollama.com/) server, reachable from the container
+    - GPU is not needed, but recommended
 - Docker Compose
-- Make (optional)
 
-Included in the compose file are 
-- search backend (based on the Go Langchain library)
-- search frontend (svelte & tailwind)
-- Chroma DB (for storing search results in vector space)
-- SearXNG (meta search engine used by the agent chain)
-- Redis (for caching search results)
+### Run the latest release
+
+Recommended, if you don't intend to develop on this project.
+
+```bash
+curl -sO https://raw.githubusercontent.com/nilsherzig/LLocalSearch/main/docker-compose.yaml 
+# 🔴 check the env vars inside the compose file and add your ollama servers host:port
+docker-compose up 
+```
+
+🎉 You should now be able to open the web interface on http://localhost:3000. Nothing else is exposed by default.
+
+### Run the current git version 
+
+Newer features, but potentially less stable.
 
 ```bash
 git clone https://github.com/nilsherzig/LLocalsearch.git
-# make sure to check the env vars inside the compose file
-# build the containers and start the services
+# 1. make sure to check the env vars inside the `docker-compose.dev.yaml`.
+# 2. Make sure you've really checked the dev compose file not the normal one.
+
+# 3. build the containers and start the services
 make dev 
-# make dev will start the frontend on port 3000. Both front and backend will hot reload on code changes. 
-# or use "make run" to detach the containers (and use "make stop" to stop them)
-# running "make upgrade" will stop all containers, pull the latest code and restart the containers
+# Both front and backend will hot reload on code changes. 
 ```
 
 If you don't have `make` installed, you can run the commands inside the Makefile manually.
 
-Now you should be able to access the frontend on [http://localhost:3000](http://localhost:3000). All other services are not exposed to the outside world.
+Now you should be able to access the frontend on [http://localhost:3000](http://localhost:3000).

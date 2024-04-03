@@ -36,6 +36,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"express": "^4.19.2",
 		"marked": "^12.0.1",
 		"node-fetch": "^3.3.2"
 	}
