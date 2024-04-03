@@ -128,6 +128,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
     1. Fromat your answer (after AI:) in markdown. 
     2. You have to use your tools to answer questions. 
     3. You have to provide the sources / links you've used to answer the quesion.
+    4. You may use tools more than once.
     Question: %s`, userQuery.Prompt)
 	_, err = chains.Run(ctx, executor, prompt, chains.WithTemperature(temp))
 	if err != nil {
