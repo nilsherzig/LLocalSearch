@@ -51,7 +51,7 @@ push:
 	@echo "Pushing images to Docker Hub"
 	# docker push $(DOCKER_HUB_USER)$/$(BACKEND_NAME):$(GIT_HASH)
 	# docker push $(DOCKER_HUB_USER)$/$(FRONTEND_NAME):$(GIT_HASH)
-	# docker push $(DOCKER_HUB_USER)$/$(BACKEND_NAME):latest
-	# docker push $(DOCKER_HUB_USER)$/$(FRONTEND_NAME):latest
+	docker push $(DOCKER_HUB_USER)/$(BACKEND_NAME):latest
+	docker push $(DOCKER_HUB_USER)/$(FRONTEND_NAME):latest
 	docker push $(DOCKER_HUB_USER)/$(BACKEND_NAME):stable
 	docker push $(DOCKER_HUB_USER)/$(FRONTEND_NAME):stable
