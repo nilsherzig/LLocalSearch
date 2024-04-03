@@ -37,7 +37,8 @@
 		'how much does obsidian sync cost?',
 		'Pixel 7 camera specs',
 		'whats up with the drama around apple and progressive web apps?',
-		'how much do OpenAI and Microsoft plan to spend on their new datacenter?'
+		'how much do OpenAI and Microsoft plan to spend on their new datacenter?',
+		'what is "LLocalSearch"?'
 	];
 
 	let lastElemWasStream = false;

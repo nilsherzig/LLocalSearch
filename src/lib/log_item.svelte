@@ -20,11 +20,8 @@
 		scollToElement(logElement);
 	});
 
-	// $: {
-	// 	console.log(logElement.stepType);
-	// 	scollToElement();
-	// }
 	$: scollToElement(logElement);
+
 	const renderer = {
 		link(href: string, title: string, text: string) {
 			const link = marked.Renderer.prototype.link.call(this, href, title, text);
@@ -172,15 +169,3 @@
 		</div>
 	</div>
 </div>
-
-<!-- <style lang="postcss"> -->
-<!-- 	:global(#level-1) { -->
-<!-- 		padding-left: 2rem; -->
-<!-- 	} -->
-<!-- 	:global(#level-2) { -->
-<!-- 		padding-left: 4rem; -->
-<!-- 	} -->
-<!-- 	:global(#level-3) { -->
-<!-- 		padding-left: 8rem; -->
-<!-- 	} -->
-<!-- </style> -->
