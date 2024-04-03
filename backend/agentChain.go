@@ -126,8 +126,8 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	temp := 0.0
 	prompt := fmt.Sprintf(`
     1. Fromat your answer (after AI:) in markdown. 
-    2. You HAVE to use your tools to answer questions. 
-    3. You have to provide sources / links.
+    2. You have to use your tools to answer questions. 
+    3. You have to provide the sources / links you've used to answer the quesion.
     Question: %s`, userQuery.Prompt)
 	_, err = chains.Run(ctx, executor, prompt, chains.WithTemperature(temp))
 	if err != nil {
