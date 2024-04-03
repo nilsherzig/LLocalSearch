@@ -206,7 +206,10 @@
 			<ToggleModelSwitch bind:currentModel bind:showModelSwitchWindow></ToggleModelSwitch>
 		</div>
 		<div class="flex flex-row">
-			<ToggleLogsButton bind:showLogs></ToggleLogsButton>
+			<!-- dont show log toggle when there are no logs -->
+			{#if logs.length > 0}
+				<ToggleLogsButton bind:showLogs></ToggleLogsButton>
+			{/if}
 			<ToggleDarkmodeButton bind:isDarkMode></ToggleDarkmodeButton>
 		</div>
 	</div>
