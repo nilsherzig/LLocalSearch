@@ -6,6 +6,9 @@ This is a completely locally running search engine using LLM Agents. The user ca
 
 Now with follow-up questions: 
 
+https://github.com/nilsherzig/LLocalSearch/assets/72463901/8323be25-de2a-4ddf-853b-4a01557b5599
+
+
 ![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/9f6497aa-8047-4d11-9a12-66aff65d3faa)
 
 ## Features 
