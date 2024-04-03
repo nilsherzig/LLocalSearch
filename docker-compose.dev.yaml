@@ -44,7 +44,6 @@ services:
     #   driver: none
 
   redis:
-    container_name: redis
     image: docker.io/library/redis:alpine
     command: redis-server --save 30 1 --loglevel warning
     networks:
@@ -59,7 +58,6 @@ services:
       - DAC_OVERRIDE
 
   searxng:
-    container_name: searxng
     image: docker.io/searxng/searxng:latest
     networks:
       - searxng

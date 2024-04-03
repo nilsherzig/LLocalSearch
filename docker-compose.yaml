@@ -1,6 +1,5 @@
 services:
   backend:
-    container_name: backend
     image: nilsherzig/llocalsearch-backend:latest
     environment:
       # the ip / url of YOUR Ollama server
@@ -21,7 +20,6 @@ services:
   frontend:
     depends_on:
       - backend
-    container_name: frontend
     image: nilsherzig/llocalsearch-frontend:latest
     ports:
       - '3000:4173'
@@ -29,13 +27,11 @@ services:
       - llm_network
 
   chromadb:
-    container_name: chromadb
     image: chromadb/chroma
     networks:
       - llm_network
 
   redis:
-    container_name: redis
     image: docker.io/library/redis:alpine
     command: redis-server --save 30 1 --loglevel warning
     networks:
@@ -50,7 +46,6 @@ services:
       - DAC_OVERRIDE
 
   searxng:
-    container_name: searxng
     image: docker.io/searxng/searxng:latest
     networks:
       - searxng

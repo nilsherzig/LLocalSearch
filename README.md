@@ -40,7 +40,8 @@ Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get
 Recommended, if you don't intend to develop on this project.
 
 ```bash
-curl -sO https://raw.githubusercontent.com/nilsherzig/LLocalSearch/main/docker-compose.yaml 
+git clone https://github.com/nilsherzig/LLocalSearch.git
+cd ./LLocalSearch
 # 🔴 check the env vars inside the compose file and add your ollama servers host:port
 docker-compose up 
 ```
