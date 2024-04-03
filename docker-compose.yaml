@@ -3,11 +3,10 @@ services:
     container_name: backend
     image: nilsherzig/llocalsearch-backend:latest
     environment:
-      ##### change these
       # the ip / url of YOUR Ollama server
+      # CHANGE THIS
       - OLLAMA_HOST=http://192.168.0.109:11434
 
-      ##### no need to change these
       # the url of the chroma db
       - CHROMA_DB_URL=http://chromadb:8000
 
