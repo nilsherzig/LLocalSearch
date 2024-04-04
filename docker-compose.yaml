@@ -2,22 +2,14 @@ services:
   backend:
     image: nilsherzig/llocalsearch-backend:latest
     environment:
-      # the ip / url of YOUR Ollama server
-      # CHANGE THIS
-      - OLLAMA_HOST=http://host.docker.internal:11434
-
-      # the url of the chroma db
-      - CHROMA_DB_URL=http://chromadb:8000
-
-      # the url of the redis db
-      - SEARXNG_DOMAIN=http://searxng:8080
-
-      # the maximum amount of iterations the agent will run to find your answer
-      - MAX_ITERATIONS=30
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - CHROMA_DB_URL=${CHROMA_DB_URL:-http://chromadb:8080}
+      - SEARXNG_DOMAIN=${SEARXNG_DOMAIN:-http://redis:6379}
+      - MAX_ITERATIONS=${MAX_ITERATIONS:-30}
     networks:
       - llm_network
     extra_hosts:
-       - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
 
   frontend:
     depends_on:

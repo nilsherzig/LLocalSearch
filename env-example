@@ -1,0 +1,7 @@
+# copy this file to .env to apply these environment variables
+# sensible defaults will be used if these are not set
+OLLAMA_HOST=http://192.168.0.109:11434
+MAX_ITERATIONS=30
+CHROMA_DB_URL=http://chromadb:8000
+SEARXNG_DOMAIN=http://searxng:8080
+SEARXNG_HOSTNAME=localhost
