@@ -1,7 +1,7 @@
 # LLocalSearch
 
 > [!IMPORTANT]
-> I've pushed some very important performance upgrades to the container registry. Please run "docker-compose pull" to update your containers. 
+> I've pushed some very important performance upgrades and hotfixes to the container registry. Please run "docker-compose pull" to update your containers. 
 
 ## What it is
 
