@@ -1,11 +1,7 @@
 # LLocalSearch
 
 > [!IMPORTANT]
-> Hi people, i just woke up to 1k stars haha.
-> I really appreciate the interest in my project, but its going to take some time for me to go through everything.
-> Hope you understand :) Please open Issues (not dms / emails), i promise i will get to them asap
->
-> Docker / Networking things are a bit bumpy at the moment, please just open an issue if you think, that something should work but isn't working. There are a lot of different host system configurations out there, and i can't test them by myself. 
+> I've pushed some very important performance updates to the container registry. Please run "docker-compose pull" to update your containers. 
 
 ## What it is
 
