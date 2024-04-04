@@ -52,7 +52,7 @@ Recommended, if you don't intend to develop on this project.
 ```bash
 git clone https://github.com/nilsherzig/LLocalSearch.git
 cd ./LLocalSearch
-# 🔴 check the env vars inside the compose file and add your ollama servers host:port
+# 🔴 check the env vars inside the compose file (and `env-example` file) and change them if needed
 docker-compose up 
 ```
 
