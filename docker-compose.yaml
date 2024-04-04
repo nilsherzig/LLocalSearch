@@ -4,7 +4,7 @@ services:
     environment:
       # the ip / url of YOUR Ollama server
       # CHANGE THIS
-      - OLLAMA_HOST=http://192.168.0.109:11434
+      - OLLAMA_HOST=http://host.docker.internal:11434
 
       # the url of the chroma db
       - CHROMA_DB_URL=http://chromadb:8000
@@ -16,6 +16,8 @@ services:
       - MAX_ITERATIONS=30
     networks:
       - llm_network
+    extra_hosts:
+       - "host.docker.internal:host-gateway"
 
   frontend:
     depends_on:
