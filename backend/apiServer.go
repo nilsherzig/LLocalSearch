@@ -39,14 +39,14 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	clientQuery.Prompt = prompt
 
 	session := r.URL.Query().Get("session")
-	if prompt == "" {
+	if session == "" {
 		http.Error(w, "session is required", http.StatusBadRequest)
 		return
 	}
 	clientQuery.Session = session
 
 	modelname := r.URL.Query().Get("modelname")
-	if prompt == "" {
+	if modelname == "" {
 		http.Error(w, "modelname is required", http.StatusBadRequest)
 		return
 	}
