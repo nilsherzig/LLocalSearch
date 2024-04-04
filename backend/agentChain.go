@@ -50,7 +50,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	startTime := time.Now()
 
 	// used to set the vector db namespace and chat memory
-	if userQuery.Session == "" {
+	if userQuery.Session == "default" {
 		userQuery.Session = utils.GetSessionString()
 	}
 	session := userQuery.Session

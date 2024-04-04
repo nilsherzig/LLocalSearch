@@ -47,7 +47,7 @@
 
 	let showLogs = false;
 	let isDarkMode: boolean;
-	let sessionString: string = '';
+	let sessionString: string = 'default';
 
 	function changeDarkMode(isDarkMode: boolean) {
 		if (typeof window === 'undefined') return;
@@ -97,7 +97,7 @@
 		}
 		eventSource = null;
 		logs = [];
-		sessionString = '';
+		sessionString = 'default';
 		showExamplePrompts = true;
 	}
 
