@@ -12,7 +12,7 @@ import (
 )
 
 func NewOllamaEmbeddingLLM() (*ollama.LLM, error) {
-	modelName := "all-minilm"
+	modelName := "all-minilm:v2"
 	return NewOllama(modelName)
 }
 
