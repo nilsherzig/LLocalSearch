@@ -6,19 +6,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     environment:
-      ##### change these
-      # the ip / url of YOUR Ollama server
-      - OLLAMA_HOST=http://192.168.0.109:11434
-
-      ##### no need to change these
-      # the url of the chroma db
-      - CHROMA_DB_URL=http://chromadb:8000
-
-      # the url of the redis db
-      - SEARXNG_DOMAIN=http://searxng:8080
-
-      # the maximum amount of iterations the agent will run to find your answer
-      - MAX_ITERATIONS=30
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - CHROMA_DB_URL=${CHROMA_DB_URL:-http://chromadb:8000}
+      - SEARXNG_DOMAIN=${SEARXNG_DOMAIN:-http://searxng:8080}
+      - MAX_ITERATIONS=${MAX_ITERATIONS:-30}
     networks:
       - llm_network_dev
 
