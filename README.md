@@ -1,5 +1,10 @@
 # LLocalSearch
 
+> [!IMPORTANT]
+> Hi people, i just woke up to 1k stars haha.
+> I really appreciate the interest in my project, but its going to take some time for me to go through everything.
+> Hope you understand :) Please open Issues (not dms / emails), i promise i will get to them asap
+
 ## What it is
 
 This is a completely locally running search engine using LLM Agents. The user can ask a question and the system will use a chain of LLMs to find the answer. The user can see the progress of the agents and the final answer. No OpenAI or Google API keys are needed.
