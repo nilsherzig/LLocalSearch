@@ -27,16 +27,16 @@ type WebSearch struct {
 var _ tools.Tool = WebSearch{}
 
 func (c WebSearch) Description() string {
-	return `Usefull for searching the internet. You have to use this tool if you're not 100% certain. The top results for your search query will be downloaded to your vector db.`
+	return `Usefull for searching the internet. You have to use this tool if you're not 100% certain. The top 10 results will be added to the vector db. The top 3 results are also getting returned to you directly.`
 }
 
 func (c WebSearch) Name() string {
 	return "WebSearch"
 }
 
-func (c WebSearch) Call(ctx context.Context, input string) (string, error) {
-	if c.CallbacksHandler != nil {
-		c.CallbacksHandler.HandleToolStart(ctx, input)
+func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
+	if ws.CallbacksHandler != nil {
+		ws.CallbacksHandler.HandleToolStart(ctx, input)
 	}
 
 	input = strings.TrimPrefix(input, "\"")
@@ -88,13 +88,13 @@ func (c WebSearch) Call(ctx context.Context, input string) (string, error) {
 		counter += 1
 		wg.Add(1)
 		go func(i int) {
-			err := utils.DownloadWebsiteToVectorDB(ctx, apiResponse.Results[i].URL, c.SessionString)
+			err := utils.DownloadWebsiteToVectorDB(ctx, apiResponse.Results[i].URL, ws.SessionString)
 			if err != nil {
 				log.Printf("error from evaluator: %s", err.Error())
 				wg.Done()
 				return
 			}
-			ch, ok := c.CallbacksHandler.(utils.CustomHandler)
+			ch, ok := ws.CallbacksHandler.(utils.CustomHandler)
 			if ok {
 				newSource := utils.Source{
 					Name: "WebSearch",
@@ -108,11 +108,18 @@ func (c WebSearch) Call(ctx context.Context, input string) (string, error) {
 		}(i)
 	}
 	wg.Wait()
+	result, err := SearchVectorDB.Call(
+		SearchVectorDB{
+			CallbacksHandler: nil,
+			SessionString:    ws.SessionString,
+		},
+		context.Background(), input)
+	if err != nil {
+		return fmt.Sprintf("error from vector db search: %s", err.Error()), nil //nolint:nilerr
+	}
 
-	result := fmt.Sprintf("Downloaded websites to vector db. You dont know anything new from this tool, you have to search through the vector db to find anything about the downloaded websites.")
-
-	if c.CallbacksHandler != nil {
-		c.CallbacksHandler.HandleToolEnd(ctx, result)
+	if ws.CallbacksHandler != nil {
+		ws.CallbacksHandler.HandleToolEnd(ctx, result)
 	}
 
 	if len(apiResponse.Results) == 0 {
