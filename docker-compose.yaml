@@ -3,8 +3,8 @@ services:
     image: nilsherzig/llocalsearch-backend:latest
     environment:
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-      - CHROMA_DB_URL=${CHROMA_DB_URL:-http://chromadb:8080}
-      - SEARXNG_DOMAIN=${SEARXNG_DOMAIN:-http://redis:6379}
+      - CHROMA_DB_URL=${CHROMA_DB_URL:-http://chromadb:8000}
+      - SEARXNG_DOMAIN=${SEARXNG_DOMAIN:-http://searxng:8080}
       - MAX_ITERATIONS=${MAX_ITERATIONS:-30}
     networks:
       - llm_network
