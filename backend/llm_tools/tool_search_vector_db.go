@@ -29,7 +29,7 @@ type Result struct {
 	Source string
 }
 
-// var usedResults = make(map[string]bool)
+var usedResults = make(map[string][]string)
 
 func (c SearchVectorDB) Description() string {
 	return `Usefull for searching through added files and websites. Search for keywords in the text not whole questions, avoid relative words like "yesterday" think about what could be in the text. 
@@ -41,7 +41,7 @@ func (c SearchVectorDB) Name() string {
 }
 
 func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) {
-	amountOfResults := 3 // TODO maybe take as many results as possible (with context as max chars?)
+	amountOfResults := 3
 	scoreThreshold := 0.4
 	if c.CallbacksHandler != nil {
 		c.CallbacksHandler.HandleToolStart(ctx, input)
@@ -72,7 +72,6 @@ func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) 
 		vectorstores.WithScoreThreshold(float32(scoreThreshold)),
 	}
 
-	// log.Printf("searching for %s in vector db", input)
 	retriver := vectorstores.ToRetriever(store, amountOfResults, options...)
 	docs, err := retriver.GetRelevantDocuments(context.Background(), input)
 	if err != nil {
@@ -88,26 +87,20 @@ func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) 
 
 		source, ok := r.Metadata["url"].(string)
 		if ok {
-			// basedomain, err := extractBaseDomain(source)
-			// if err != nil {
-			// 	log.Printf("error extracting base domain: %v", err)
-			// 	break
-			// }
 			newResult.Source = source
 		}
 
-		// if usedResults[newResult.Text] {
-		//           continue
-		//       }
+		for _, usedLink := range usedResults[c.SessionString] {
+			if usedLink == newResult.Text {
+				continue
+			}
+		}
 		ch, ok := c.CallbacksHandler.(utils.CustomHandler)
 		if ok {
 			ch.HandleVectorFound(ctx, fmt.Sprintf("%s with a score of %f", newResult.Source, r.Score))
 		}
 		results = append(results, newResult)
-		// usedResults[newResult.Text] = true
-		// } else {
-		// 	log.Printf("result already used")
-		// }
+		usedResults[c.SessionString] = append(usedResults[c.SessionString], newResult.Text)
 	}
 
 	if len(docs) == 0 {

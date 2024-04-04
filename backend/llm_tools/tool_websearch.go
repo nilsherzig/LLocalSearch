@@ -16,13 +16,12 @@ import (
 	"github.com/tmc/langchaingo/tools"
 )
 
-// ReadWebsite is a tool that can do math.
 type WebSearch struct {
 	CallbacksHandler callbacks.Handler
 	SessionString    string
 }
 
-// var usedLinks = make(map[string]bool)
+var usedLinks = make(map[string][]string)
 
 var _ tools.Tool = WebSearch{}
 
@@ -60,21 +59,14 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 
 	log.Printf("Search found %d Results\n", len(apiResponse.Results))
 
-	// for i, result := range apiResponse.Results {
-	// 	if i < 3 {
-	// 		err := DownloadWebsiteToVectorDB(ctx, result.URL, c.sessionString)
-	// 		if err != nil {
-	// 			return fmt.Sprintf("error from evaluator: %s", err.Error()), nil //nolint:nilerr
-	// 		}
-	// 	}
-	// }
-
 	wg := sync.WaitGroup{}
 	counter := 0
 	for i := range apiResponse.Results {
-		// if usedLinks[apiResponse.Results[i].URL] {
-		// 	continue
-		// }
+		for _, usedLink := range usedLinks[ws.SessionString] {
+			if usedLink == apiResponse.Results[i].URL {
+				continue
+			}
+		}
 
 		if counter > 10 {
 			break
@@ -102,7 +94,7 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 				}
 
 				ch.HandleSourceAdded(ctx, newSource)
-				// usedLinks[apiResponse.Results[i].URL] = true
+				usedLinks[ws.SessionString] = append(usedLinks[ws.SessionString], apiResponse.Results[i].URL)
 			}
 			wg.Done()
 		}(i)
