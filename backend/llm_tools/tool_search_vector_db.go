@@ -41,7 +41,7 @@ func (c SearchVectorDB) Name() string {
 }
 
 func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) {
-	amountOfResults := 5 // TODO maybe take as many results as possible (with context as max chars?)
+	amountOfResults := 3 // TODO maybe take as many results as possible (with context as max chars?)
 	scoreThreshold := 0.4
 	if c.CallbacksHandler != nil {
 		c.CallbacksHandler.HandleToolStart(ctx, input)
