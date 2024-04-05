@@ -17,22 +17,10 @@ import (
 
 func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStreamElement, userQuery utils.ClientQuery) error {
 	defer func() {
-		// send a close message to the client when the function ends
-		// the client can use this to close the connection gracefully
-		// outputChan <- utils.HttpJsonStreamElement{
-		// 	Close: true,
-		// }
-
-		// this defer acts as a try catch block around the current function
-		// this prevents the whole server from crashing when an error occurs
-
-		// TODO: figure out how to stop the "sending on closed channel" error
-		// when the client disconnects
 		if r := recover(); r != nil {
-			log.Printf("Recovered from panic: %v", r)
+			slog.Error("Recovered from panic", "error", r)
 		}
 	}()
-	// TODO: move this check into the agent chain, if switching model in interface becomes a thing
 
 	neededModels := []string{"nomic-embed-text:v1.5", userQuery.ModelName}
 	for _, modelName := range neededModels {

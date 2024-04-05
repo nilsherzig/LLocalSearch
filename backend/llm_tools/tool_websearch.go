@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -80,6 +81,12 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 		counter += 1
 		wg.Add(1)
 		go func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("Recovered from panic", "error", r)
+				}
+			}()
+
 			err := utils.DownloadWebsiteToVectorDB(ctx, apiResponse.Results[i].URL, ws.SessionString)
 			if err != nil {
 				log.Printf("error from evaluator: %s", err.Error())

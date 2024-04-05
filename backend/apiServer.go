@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -82,20 +82,19 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			jsonString, err := json.Marshal(output)
 			if err != nil {
-				log.Printf("Error marshalling output: %v", err)
+				slog.Info("Error marshalling output", "error", err)
 			}
 			sse := fmt.Sprintf("data: %s\n\n", jsonString)
 			_, writeErr := fmt.Fprintf(w, sse)
 			if writeErr != nil {
-				// Error writing to the response writer, likely because the client
-				// has disconnected
+				slog.Info("Error writing to response writer", "error", writeErr)
 				return
 			}
 			if f, ok := w.(http.Flusher); ok {
-				f.Flush() // Flush to send the chunk immediately
+				f.Flush()
 			}
 		case <-ctx.Done():
-			// Client has disconnected, safely exit
+			slog.Info("Client disconnected")
 			return
 		}
 	}
