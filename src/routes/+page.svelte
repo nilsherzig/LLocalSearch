@@ -131,9 +131,10 @@
 				return;
 			}
 			if (log.stepType == StepType.HandleOllamaStart) {
+				let currentLogIndex = logs.length;
 				setTimeout(() => {
-					for (log of logs) {
-						if (log.stream) {
+					for (let i = currentLogIndex; i < logs.length; i++) {
+						if (logs[i].stream) {
 							return;
 						}
 					}
@@ -143,7 +144,7 @@
 					};
 					logs.push(newLogElement);
 					logs = logs;
-				}, 5000);
+				}, 3000);
 			}
 
 			if (log.message) {
