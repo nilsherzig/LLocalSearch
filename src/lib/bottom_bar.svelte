@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import ChatButton from './chat_button.svelte';
 	export let prompt: string;
 	export let sendPrompt: () => void;
 	export let resetChat: () => void;
 	export let sendMode = true;
 	let textArea: HTMLTextAreaElement;
-	import ChatButton from './chat_button.svelte';
+	export let eventSource: EventSource | null;
+	export let stopChat: () => void;
 
 	function autoResize() {
 		textArea.style.height = 'auto'; // Reset height to recalibrate
@@ -49,7 +51,7 @@
 				placeholder="Ask me something about llamas..."
 				autofocus
 			></textarea>
-			<ChatButton {prompt} bind:sendMode {sendPrompt} {resetChat} />
+			<ChatButton {prompt} bind:sendMode bind:eventSource {sendPrompt} {resetChat} {stopChat} />
 		</form>
 	</div>
 </div>

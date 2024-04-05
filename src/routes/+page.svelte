@@ -101,6 +101,13 @@
 		showExamplePrompts = true;
 	}
 
+	function stopChat() {
+		if (eventSource !== null) {
+			eventSource.close();
+		}
+		eventSource = null;
+	}
+
 	// Establish a connection to the server-sent events endpoint
 	function sendPrompt() {
 		showExamplePrompts = false;
@@ -239,7 +246,8 @@
 <div
 	class="absolute bottom-0 w-full transition-all bg-gradient-to-t from-stone-200 to-transparent dark:from-stone-950"
 >
-	<BottomBar bind:sendMode bind:prompt {sendPrompt} {resetChat}></BottomBar>
+	<BottomBar bind:sendMode bind:eventSource bind:prompt {sendPrompt} {resetChat} {stopChat}
+	></BottomBar>
 </div>
 
 <style lang="postcss">
