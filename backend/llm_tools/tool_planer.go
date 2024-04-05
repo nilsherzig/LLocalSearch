@@ -21,7 +21,7 @@ type Feedback struct {
 var _ tools.Tool = Feedback{}
 
 func (dw Feedback) Description() string {
-	return `Usefull for self critique. You have to use this function before submitting a final answer. You have to provide your current attempt at answering the quesion.`
+	return `Useful for self critique. You have to use this function before submitting a final answer. You have to provide your current attempt at answering the quesion.`
 }
 
 func (dw Feedback) Name() string {
