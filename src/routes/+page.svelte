@@ -32,7 +32,7 @@
 
 	let showExamplePrompts = true;
 	let examplePrompts = [
-		'how much does a llama weight?',
+		'how much does a llama weigh?',
 		'does openai work with the military?',
 		'how much does obsidian sync cost?',
 		'Pixel 7 camera specs',
