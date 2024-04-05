@@ -24,8 +24,10 @@
 	function handleKeyDown(event: KeyboardEvent) {
 		if (sendMode) {
 			if (event.key === 'Enter') {
-				event.preventDefault(); // Prevents the default action of the enter key (e.g., submitting a form)
-				sendPrompt();
+				if (!event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+					event.preventDefault(); // Prevents the default action of the enter key (e.g., submitting a form)
+					sendPrompt();
+				}
 			}
 		}
 		autoResize(); // Initial resize to adjust for any default text
