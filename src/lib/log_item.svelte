@@ -12,8 +12,7 @@
 			return;
 		}
 		scrollContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		if (elem.stepType == StepType.HandleFinalAnswer) {
-		}
+		// scrollContainer.scrollTop = scrollContainer.scrollHeight;
 	}
 
 	onMount(() => {
@@ -55,15 +54,6 @@
 					class="my-2 p-2 text-stone-700 dark:text-stone-200 dark:border-stone-400 font-bold text-lg"
 				>
 					{logElement.message}
-				</div>
-				<!-- final answer -->
-			{:else if logElement.stepType == StepType.HandleFinalAnswer}
-				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-950 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-700"
-				>
-					<article class="p-2 prose prose-stone dark:prose-invert">
-						{@html marked.parse(logElement.message)}
-					</article>
 				</div>
 				<!-- stream message -->
 			{:else if logElement.stream}

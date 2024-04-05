@@ -110,6 +110,7 @@
 			message: `${prompt}`,
 			stepType: StepType.HandleUserPrompt
 		};
+
 		logs.push(newLogElement);
 		sendMode = false;
 		prompt = '';
@@ -202,7 +203,9 @@
 	</div>
 </div>
 <div class="absolute top-0 w-full rounded transition-all">
-	<div class="flex p-4 justify-between bg-stone-200 dark:bg-stone-950 transition-all">
+	<div
+		class="flex p-4 justify-between dark:bg-stone-950 bg-stone-200 lg:bg-transparent lg:dark:bg-transparent lg:bg-gradient-to-b lg:from-stone-200 lg:to-transparent lg:dark:from-stone-950 transition-all"
+	>
 		<div>
 			<ToggleModelSwitch bind:currentModel bind:showModelSwitchWindow></ToggleModelSwitch>
 		</div>
@@ -214,7 +217,7 @@
 			<ToggleDarkmodeButton bind:isDarkMode></ToggleDarkmodeButton>
 		</div>
 	</div>
-	<div class="bg-gradient-to-t from-transparent to-stone-200 dark:to-stone-950 h-4"></div>
+	<div class="lg:hidden bg-gradient-to-t from-transparent to-stone-200 dark:to-stone-950 h-4"></div>
 </div>
 
 <div
