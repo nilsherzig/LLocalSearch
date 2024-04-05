@@ -13,10 +13,9 @@
 	class="text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer transition-all dark:text-stone-500 dark:hover:text-stone-200 dark:active:bg-stone-700"
 >
 	{#if sendMode && prompt != ''}
-		<span title="show message">
+		<span title="send message">
 			<button
 				class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300 hover:shadow-inner"
-				type="submit"
 				on:click={() => {
 					sendPrompt();
 				}}
@@ -42,9 +41,8 @@
 		<span title="stop chat">
 			<button
 				class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
-				type="submit"
 				on:click={() => {
-					resetChat();
+					stopChat();
 					sendMode = true;
 				}}
 			>
@@ -69,7 +67,6 @@
 		<span title="reset chat">
 			<button
 				class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
-				type="submit"
 				on:click={() => {
 					resetChat();
 					sendMode = true;
