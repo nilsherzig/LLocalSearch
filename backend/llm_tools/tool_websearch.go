@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/nilsherzig/localLLMSearch/utils"
+	"github.com/sourcegraph/conc"
 	"github.com/tmc/langchaingo/callbacks"
 	"github.com/tmc/langchaingo/tools"
 )
@@ -26,7 +27,7 @@ var usedLinks = make(map[string][]string)
 var _ tools.Tool = WebSearch{}
 
 func (c WebSearch) Description() string {
-	return `Usefull for searching the internet. You have to use this tool if you're not 100% certain. The top 10 results will be added to the vector db. The top 3 results are also getting returned to you directly. For more serch queries through the same websites, use the VectorDB tool.`
+	return `Usefull for searching the internet. You have to use this tool if you're not 100% certain. The top 10 results will be added to the vector db. The top 3 results are also getting returned to you directly. For more search queries through the same websites, use the VectorDB tool.`
 }
 
 func (c WebSearch) Name() string {
@@ -58,12 +59,14 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 	}
 
 	log.Printf("Search found %d Results\n", len(apiResponse.Results))
-
-	wg := sync.WaitGroup{}
+	wg := conc.WaitGroup{}
+	var mu sync.Mutex
 	counter := 0
-	for i := range apiResponse.Results {
+	for _, result := range apiResponse.Results {
+		result := result
+
 		for _, usedLink := range usedLinks[ws.SessionString] {
-			if usedLink == apiResponse.Results[i].URL {
+			if usedLink == result.URL {
 				continue
 			}
 		}
@@ -73,31 +76,36 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 		}
 
 		// if result link ends in .pdf, skip
-		if strings.HasSuffix(apiResponse.Results[i].URL, ".pdf") {
+		if strings.HasSuffix(result.URL, ".pdf") {
 			continue
 		}
 
+		mu.Lock()
 		counter += 1
-		wg.Add(1)
-		go func(i int) {
-			err := utils.DownloadWebsiteToVectorDB(ctx, apiResponse.Results[i].URL, ws.SessionString)
+		mu.Unlock()
+
+		wg.Go(func() {
+			defer func() {
+				mu.Lock()
+				usedLinks[ws.SessionString] = append(usedLinks[ws.SessionString], result.URL)
+				mu.Unlock()
+			}()
+
+			err := utils.DownloadWebsiteToVectorDB(ctx, result.URL, ws.SessionString)
 			if err != nil {
 				log.Printf("error from evaluator: %s", err.Error())
-				wg.Done()
 				return
 			}
 			ch, ok := ws.CallbacksHandler.(utils.CustomHandler)
 			if ok {
 				newSource := utils.Source{
 					Name: "WebSearch",
-					Link: apiResponse.Results[i].URL,
+					Link: result.URL,
 				}
 
 				ch.HandleSourceAdded(ctx, newSource)
-				usedLinks[ws.SessionString] = append(usedLinks[ws.SessionString], apiResponse.Results[i].URL)
 			}
-			wg.Done()
-		}(i)
+		})
 	}
 	wg.Wait()
 	result, err := SearchVectorDB.Call(

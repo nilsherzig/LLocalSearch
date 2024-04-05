@@ -9,6 +9,8 @@ require (
 	github.com/tmc/langchaingo v0.1.7
 )
 
+require github.com/sourcegraph/conc v0.3.0 // indirect
+
 require (
 	github.com/AssemblyAI/assemblyai-go-sdk v1.3.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect

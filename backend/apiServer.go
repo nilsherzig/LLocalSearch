@@ -85,7 +85,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 				log.Printf("Error marshalling output: %v", err)
 			}
 			sse := fmt.Sprintf("data: %s\n\n", jsonString)
-			_, writeErr := fmt.Fprintf(w, sse)
+			_, writeErr := fmt.Fprint(w, sse)
 			if writeErr != nil {
 				// Error writing to the response writer, likely because the client
 				// has disconnected
@@ -102,7 +102,6 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func modellistHandler(w http.ResponseWriter, r *http.Request) {
-	utils.GetOllamaModelList()
 	// Set CORS headers
 	setCorsHeaders(w)
 
@@ -125,7 +124,10 @@ func modellistHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonModels)
+	if _, err := w.Write(jsonModels); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func StartApiServer() {
@@ -135,5 +137,8 @@ func StartApiServer() {
 
 	// Start the HTTP server
 	fmt.Println("Server started at http://localhost:8080")
-	http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
