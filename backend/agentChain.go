@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"time"
 
@@ -37,7 +36,6 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 
 	startTime := time.Now()
 
-	// used to set the vector db namespace and chat memory
 	if userQuery.Session == "default" {
 		userQuery.Session = utils.GetSessionString()
 	}
@@ -57,11 +55,9 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 
 	slog.Info("Starting agent chain", "session", session, "userQuery", userQuery, "startTime", startTime)
 
-	// llm, err := utils.NewGPT35()
-	// llm, err := utils.NewGPT4()
 	llm, err := utils.NewOllama(userQuery.ModelName)
 	if err != nil {
-		log.Printf("Error creating new LLM: %v", err)
+		slog.Warn("Error creating new LLM", "error", err)
 		return err
 	}
 
@@ -79,11 +75,6 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 			},
 			SessionString: session,
 		},
-		// llm_tools.Feedback{
-		// 	CallbacksHandler: utils.CustomHandler{},
-		// 	Query:            userQuery,
-		// 	Llm:              llm,
-		// },
 	}
 
 	executor, err := agents.Initialize(
@@ -124,20 +115,9 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		return err
 	}
 
-	messages, err := mem.ChatHistory.Messages(ctx)
-	if err != nil {
-		return err
-	}
-	log.Printf("mem messages %v", messages)
-
-	// outputChan <- utils.HttpJsonStreamElement{
-	// 	Message:  ans,
-	// 	StepType: utils.StepHandleFinalAnswer,
-	// 	Stream:   false,
-	// }
-
 	outputChan <- utils.HttpJsonStreamElement{
 		Close: true,
 	}
+
 	return nil
 }

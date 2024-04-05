@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -47,18 +46,16 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 	resp, err := http.Get(url)
 
 	if err != nil {
-		log.Println("Error making the request:", err)
+		slog.Warn("Error making the request", "error", err)
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	var apiResponse utils.SeaXngResult
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		fmt.Println("Error parsing the JSON:", err)
+		slog.Warn("Error decoding the response", "error", err)
 		return "", err
 	}
-
-	log.Printf("Search found %d Results\n", len(apiResponse.Results))
 
 	wg := sync.WaitGroup{}
 	counter := 0
@@ -89,7 +86,7 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 
 			err := utils.DownloadWebsiteToVectorDB(ctx, apiResponse.Results[i].URL, ws.SessionString)
 			if err != nil {
-				log.Printf("error from evaluator: %s", err.Error())
+				slog.Warn("Error downloading website", "error", err)
 				wg.Done()
 				return
 			}

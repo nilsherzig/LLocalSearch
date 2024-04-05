@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"os"
 
@@ -106,7 +106,7 @@ func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) 
 	if len(docs) == 0 {
 
 		response := "no results found. Try other db search keywords or download more websites."
-		log.Println(response)
+		slog.Warn("no results found", "input", input)
 		results = append(results, Result{Text: response})
 
 	} else if len(results) == 0 {

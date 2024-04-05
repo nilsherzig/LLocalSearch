@@ -3,7 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -50,7 +50,7 @@ func saveToVectorDb(timeoutCtx context.Context, docs []schema.Document, sessionS
 	_, errAd := store.AddDocuments(timeoutCtx, docs)
 
 	if errAd != nil {
-		log.Printf("Error adding document: %v\n", errAd)
+		slog.Warn("Error adding document: %v\n", errAd)
 		return fmt.Errorf("Error adding document: %v\n", errAd)
 	}
 
