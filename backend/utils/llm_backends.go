@@ -12,7 +12,7 @@ import (
 )
 
 func NewOllamaEmbeddingLLM() (*ollama.LLM, error) {
-	modelName := "all-minilm:v2"
+	modelName := "nomic-embed-text:v1.5"
 	return NewOllama(modelName)
 }
 

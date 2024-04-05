@@ -34,7 +34,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}()
 	// TODO: move this check into the agent chain, if switching model in interface becomes a thing
 
-	neededModels := []string{"all-minilm:v2", userQuery.ModelName}
+	neededModels := []string{"nomic-embed-text:v1.5", userQuery.ModelName}
 	for _, modelName := range neededModels {
 		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
 			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
@@ -129,6 +129,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
     2. You have to use your tools to answer questions. 
     3. You have to provide the sources / links you've used to answer the quesion.
     4. You may use tools more than once.
+    5. Create your reply in the same language as the search string.
     Question: %s`, userQuery.Prompt)
 	_, err = chains.Run(ctx, executor, prompt, chains.WithTemperature(temp))
 	if err != nil {
