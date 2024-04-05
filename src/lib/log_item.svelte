@@ -12,7 +12,6 @@
 			return;
 		}
 		scrollContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		// scrollContainer.scrollTop = scrollContainer.scrollHeight;
 	}
 
 	onMount(() => {
@@ -47,7 +46,11 @@
 				>
 					<span>{logElement.message}</span>
 				</div>
-				<!-- user prompt -->
+				<!-- ollama model load message -->
+			{:else if logElement.stepType == StepType.HandleOllamaModelLoadMessage}
+				<div class="flex text-stone-500 dark:text-stone-400 p-4 gap-4">
+					{logElement.message}
+				</div>
 			{:else if logElement.stepType == StepType.HandleUserPrompt}
 				<div class="w-full border-2 border-t-stone-300 dark:border-stone-800 mt-10 rounded"></div>
 				<div

@@ -11,7 +11,6 @@ export type LogElement = {
 };
 
 export const enum StepType {
-    HandleNewSession = "HandleNewSession",
     HandleAgentAction = "HandleAgentAction",
     HandleAgentFinish = "HandleAgentFinish",
     HandleChainEnd = "HandleChainEnd",
@@ -23,13 +22,16 @@ export const enum StepType {
     HandleLlmEnd = "HandleLlmEnd",
     HandleLlmError = "HandleLlmError",
     HandleLlmStart = "HandleLlmStart",
+    HandleNewSession = "HandleNewSession",
+    HandleOllamaStart = "HandleOllamaStart",
+    HandleParseError = "HandleParseError",
     HandleSourceAdded = "HandleSourceAdded",
     HandleToolEnd = "HandleToolEnd",
     HandleToolError = "HandleToolError",
     HandleToolStart = "HandleToolStart",
-    HandleVectorFound = "HandleVectorFound",
     HandleUserPrompt = "HandleUserPrompt",
-    HandleParseError = "HandleParseError",
+    HandleVectorFound = "HandleVectorFound",
+    HandleOllamaModelLoadMessage = "HandleOllamaModelLoadMessage",
 }
 
 export type Source = {

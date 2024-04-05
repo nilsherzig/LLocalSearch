@@ -130,6 +130,21 @@
 				sendMode = true;
 				return;
 			}
+			if (log.stepType == StepType.HandleOllamaStart) {
+				setTimeout(() => {
+					for (log of logs) {
+						if (log.stream) {
+							return;
+						}
+					}
+					let newLogElement: LogElement = {
+						message: `Ollama is currently loading the model. This might take a few seconds.`,
+						stepType: StepType.HandleOllamaModelLoadMessage
+					};
+					logs.push(newLogElement);
+					logs = logs;
+				}, 5000);
+			}
 
 			if (log.message) {
 				log.message = log.message.replaceAll('<|im_end|>', '').replaceAll('<|end_of_turn|>', '');

@@ -102,6 +102,10 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		return err
 	}
 
+	outputChan <- utils.HttpJsonStreamElement{
+		StepType: utils.StepHandleOllamaStart,
+	}
+
 	temp := 0.0
 	prompt := fmt.Sprintf(`
     1. Format your answer (after AI:) in markdown. 

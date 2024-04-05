@@ -19,34 +19,27 @@ type ClientQuery struct {
 type StepType string
 
 const (
-	StepHandleNewSession  StepType = "HandleNewSession"
-	StepHandleAgentAction StepType = "HandleAgentAction"
-	StepHandleAgentFinish StepType = "HandleAgentFinish"
-
-	StepHandleToolStart StepType = "HandleToolStart"
-	StepHandleToolEnd   StepType = "HandleToolEnd"
-	StepHandleToolError StepType = "HandleToolError"
-
-	StepHandleChainStart StepType = "HandleChainStart"
-	StepHandleChainEnd   StepType = "HandleChainEnd"
-	StepHandleChainError StepType = "HandleChainError"
-
-	StepHandleLlmStart StepType = "HandleLlmStart"
-	StepHandleLlmEnd   StepType = "HandleLlmEnd"
-	StepHandleLlmError StepType = "HandleLlmError"
-
-	StepHandleLLMGenerateContentStart StepType = "HandleLLMGenerateContentStart"
+	StepHandleAgentAction             StepType = "HandleAgentAction"
+	StepHandleAgentFinish             StepType = "HandleAgentFinish"
+	StepHandleChainEnd                StepType = "HandleChainEnd"
+	StepHandleChainError              StepType = "HandleChainError"
+	StepHandleChainStart              StepType = "HandleChainStart"
+	StepHandleFinalAnswer             StepType = "HandleFinalAnswer"
 	StepHandleLLMGenerateContentEnd   StepType = "HandleLLMGenerateContentEnd"
-
-	StepHandleSourceAdded StepType = "HandleSourceAdded"
-	StepHandleVectorFound StepType = "HandleVectorFound"
-
-	StepHandleFinalAnswer StepType = "HandleFinalAnswer"
-
-	StepHandleRetriverStart StepType = "HandleRetriverStart"
-	StepHandleRetriverEnd   StepType = "HandleRetriverEnd"
-
-	StepHandleParseError StepType = "HandleParseError"
+	StepHandleLLMGenerateContentStart StepType = "HandleLLMGenerateContentStart"
+	StepHandleLlmEnd                  StepType = "HandleLlmEnd"
+	StepHandleLlmError                StepType = "HandleLlmError"
+	StepHandleLlmStart                StepType = "HandleLlmStart"
+	StepHandleNewSession              StepType = "HandleNewSession"
+	StepHandleOllamaStart             StepType = "HandleOllamaStart"
+	StepHandleParseError              StepType = "HandleParseError"
+	StepHandleRetriverEnd             StepType = "HandleRetriverEnd"
+	StepHandleRetriverStart           StepType = "HandleRetriverStart"
+	StepHandleSourceAdded             StepType = "HandleSourceAdded"
+	StepHandleToolEnd                 StepType = "HandleToolEnd"
+	StepHandleToolError               StepType = "HandleToolError"
+	StepHandleToolStart               StepType = "HandleToolStart"
+	StepHandleVectorFound             StepType = "HandleVectorFound"
 )
 
 type Source struct {
