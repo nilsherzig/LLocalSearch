@@ -116,6 +116,12 @@ func modellistHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error getting model list", http.StatusInternalServerError)
 		return
 	}
+	// remove embeddings model from list
+	for i, model := range models {
+		if model == utils.EmbeddingsModel {
+			models = append(models[:i], models[i+1:]...)
+		}
+	}
 
 	jsonModels, err := json.Marshal(models)
 	if err != nil {

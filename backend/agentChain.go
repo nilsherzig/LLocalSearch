@@ -21,7 +21,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		}
 	}()
 
-	neededModels := []string{"nomic-embed-text:v1.5", userQuery.ModelName}
+	neededModels := []string{utils.EmbeddingsModel, userQuery.ModelName}
 	for _, modelName := range neededModels {
 		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
 			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
