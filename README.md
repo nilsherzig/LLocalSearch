@@ -41,6 +41,7 @@ Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get
 
 - A running [Ollama](https://ollama.com/) server, reachable from the container
     - GPU is not needed, but recommended
+    - 🔴 make sure that Ollama is not just listening on localhost but on all interfaces (or at least the docker network)
 - Docker Compose
 
 ### Run the latest release
