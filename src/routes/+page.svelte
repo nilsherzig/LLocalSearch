@@ -177,13 +177,25 @@
 			eventSource?.close();
 			eventSource = null;
 			sendMode = true;
-			// Optionally, implement reconnection logic here
 		};
-		// console.log(steps);
 	}
 	onDestroy(() => {
 		eventSource?.close();
 	});
+
+	let scrollContainer: HTMLElement;
+	function scollToElement(elem: LogElement) {
+		if (scrollContainer === undefined) {
+			return;
+		}
+		scrollContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
+	}
+
+	onMount(() => {
+		scollToElement(logs[logs.length - 1]);
+	});
+
+	$: scollToElement(logs[logs.length - 1]);
 </script>
 
 <svelte:head>
@@ -196,9 +208,9 @@
 </svelte:head>
 
 <ModelSwitchWindow bind:models bind:showModelSwitchWindow bind:currentModel></ModelSwitchWindow>
-<div class="w-screen h-screen flex flex-col transition-all">
+<div class="w-screen flex flex-col transition-all">
 	<div class="px-2 flex items-center flex-col h-full overflow-scroll">
-		<div class="py-24 align-middle">
+		<div class="py-24 align-middle" bind:this={scrollContainer}>
 			{#if showExamplePrompts}
 				<div in:fade out:fade class="flex flex-col gap-2 align-middle">
 					{#each examplePrompts as examplePrompt}
@@ -225,7 +237,7 @@
 		</div>
 	</div>
 </div>
-<div class="absolute top-0 w-full rounded transition-all">
+<div class="fixed top-0 w-full rounded transition-all">
 	<div
 		class="flex p-4 justify-between dark:bg-stone-950 bg-stone-200 lg:bg-transparent lg:dark:bg-transparent lg:bg-gradient-to-b lg:from-stone-200 lg:to-transparent lg:dark:from-stone-950 transition-all"
 	>
@@ -244,7 +256,7 @@
 </div>
 
 <div
-	class="absolute bottom-0 w-full transition-all bg-gradient-to-t from-stone-200 to-transparent dark:from-stone-950"
+	class="fixed bottom-0 w-full transition-all bg-gradient-to-t from-stone-200 to-transparent dark:from-stone-950"
 >
 	<BottomBar bind:sendMode bind:eventSource bind:prompt {sendPrompt} {resetChat} {stopChat}
 	></BottomBar>

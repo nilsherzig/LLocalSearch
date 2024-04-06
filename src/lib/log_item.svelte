@@ -6,20 +6,6 @@
 	export let logElement: LogElement;
 	export let showLogs: boolean;
 
-	let scrollContainer: HTMLElement;
-	function scollToElement(elem: LogElement) {
-		if (scrollContainer === undefined) {
-			return;
-		}
-		scrollContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-	}
-
-	onMount(() => {
-		scollToElement(logElement);
-	});
-
-	$: scollToElement(logElement);
-
 	const renderer = {
 		link(href: string, title: string, text: string) {
 			const link = marked.Renderer.prototype.link.call(this, href, title, text);
@@ -37,7 +23,7 @@
     w-full
     "
 >
-	<div bind:this={scrollContainer} class="break-words overflow-wrap">
+	<div class="break-words overflow-wrap">
 		<div class="max-w-prose flex flex-col">
 			<!-- error -->
 			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError || logElement.stepType == StepType.HandleParseError}
