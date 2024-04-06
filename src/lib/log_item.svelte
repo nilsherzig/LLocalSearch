@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { draw } from 'svelte/transition';
 	import { type LogElement, StepType } from '$lib/types/types';
-	import { onMount } from 'svelte';
 	import { marked } from 'marked';
 	export let logElement: LogElement;
 	export let showLogs: boolean;
