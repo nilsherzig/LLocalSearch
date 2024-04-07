@@ -11,7 +11,7 @@ import (
 	"github.com/tmc/langchaingo/llms/ollama"
 )
 
-var EmbeddingsModel = "nomic-embed-text:v1.5"
+var EmbeddingsModel = os.Getenv("EMBEDDINGS_MODEL_NAME")
 
 func NewOllamaEmbeddingLLM() (*ollama.LLM, error) {
 	modelName := EmbeddingsModel

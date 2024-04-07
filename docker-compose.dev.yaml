@@ -10,6 +10,7 @@ services:
       - CHROMA_DB_URL=${CHROMA_DB_URL:-http://chromadb:8000}
       - SEARXNG_DOMAIN=${SEARXNG_DOMAIN:-http://searxng:8080}
       - MAX_ITERATIONS=${MAX_ITERATIONS:-30}
+      - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-nomic-embed-text:v1.5}
     networks:
       - llm_network_dev
 
