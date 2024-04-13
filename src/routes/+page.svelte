@@ -49,9 +49,9 @@
 		'does openai work with the military?',
 		'how much does obsidian sync cost?',
 		'Pixel 7 camera specs',
-		'whats up with the drama around apple and progressive web apps?',
 		'how much do OpenAI and Microsoft plan to spend on their new datacenter?',
-		'when is llama3 going to be releaesed?'
+		'when is llama3 going to be releaesed?',
+		'What is "LLocalSearch"?'
 	];
 
 	let lastElemWasStream = false;
@@ -106,6 +106,7 @@
 		if (localStorage.clientSettings) {
 			clientValues = JSON.parse(localStorage.clientSettings);
 			console.log('loaded client settings', clientValues);
+			clientValues.session = 'default';
 		}
 
 		if (
