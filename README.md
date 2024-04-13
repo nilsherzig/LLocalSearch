@@ -1,9 +1,7 @@
 # LLocalSearch
 
 > [!IMPORTANT]
-> I've pushed some very important performance upgrades and hotfixes to the container registry. Please run "docker-compose pull" to update your containers.
->
-> 05.04.2024 switching the embedding model, please update containers. I will add an update notification to the webui in the future :).
+> Discuss configurations and setups with other users at: https://discord.gg/Cm77Eav5mX
 
 ## What it is
 
