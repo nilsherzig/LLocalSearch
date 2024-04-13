@@ -33,7 +33,7 @@ type Result struct {
 var usedResults = make(map[string][]string)
 
 func (c SearchVectorDB) Description() string {
-	return `Usefull for searching through added files and websites. Also contains the results from all old searches. Search for keywords in the text not whole questions, avoid relative words like "yesterday" think about what could be in the text. 
+	return `Useful for searching through added files and websites. Also contains the results from all previous searches. Search for keywords in the text not whole questions, avoid relative words like "yesterday" think about what could be in the text. 
     The input to this tool will be run against a vector db. The top results will be returned as json.`
 }
 
