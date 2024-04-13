@@ -45,7 +45,7 @@
 				</div>
 				<!-- stream message -->
 			{:else if logElement.stream}
-				{#if logElement.message.includes('Action: WebSearch')}
+				{#if logElement.message.includes('Action: WS')}
 					<div class="flex text-stone-500 dark:text-stone-400 p-4 gap-4">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -64,7 +64,7 @@
 						</svg>
 						<span>{logElement.message.split('Action Input:')[1] || ''}</span>
 					</div>
-				{:else if logElement.message.includes('Action: SearchVectorDB')}
+				{:else if logElement.message.includes('Action: SVDB')}
 					<div class="flex text-stone-500 dark:text-stone-400 p-4 gap-4">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"

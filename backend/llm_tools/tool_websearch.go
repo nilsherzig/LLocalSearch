@@ -27,11 +27,15 @@ var usedLinks = make(map[string][]string)
 var _ tools.Tool = WebSearch{}
 
 func (c WebSearch) Description() string {
-	return `Usefull for searching the internet. The top 10 results will be added to the vector db. The top 3 results are also getting returned to you directly. For more serch queries through the same websites, use the VectorDB tool.`
+	return `Use this tool to search for websites that may answer your search query. The best websites (according to the search engine) are broken down into small parts and added to your vector database. 
+
+The parts of these websites that are most similar to your search query will be returned to you directly. 
+
+You can query the vector database later with other inputs to get other parts of these websites.`
 }
 
 func (c WebSearch) Name() string {
-	return "WebSearch"
+	return "WS"
 }
 
 func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
