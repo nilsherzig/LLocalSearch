@@ -39,6 +39,9 @@ Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get
     - 🔴 make sure that Ollama is not just listening on localhost but on all interfaces (or at least the docker network). You don't have to change anything if you're using ollama inside docker.
 - Docker Compose
 
+> [!WARNING]
+> localhost / 127.0.0.1 inside the backend container (`OLLAMA_HOST` var) is not the same as localhost on your host device.
+
 ### Run the latest release
 
 Recommended, if you don't intend to develop on this project.
