@@ -50,7 +50,7 @@
 		'how much does obsidian sync cost?',
 		'Pixel 7 camera specs',
 		'how much do OpenAI and Microsoft plan to spend on their new datacenter?',
-		'when is llama3 going to be releaesed?',
+		'when is llama3 going to be released?',
 		'What is "LLocalSearch"?'
 	];
 
