@@ -54,6 +54,16 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 			Session:  session,
 			Stream:   false,
 		}
+		// TODO HACK remove this ugly workaround
+		// initializes the vector db namespace
+		// otherwise the go routine spam in the download func will
+		// race the intialization
+		sad := llm_tools.SearchVectorDB{
+			CallbacksHandler: utils.CustomHandler{OutputChan: outputChan},
+			SessionString:    session,
+			Settings:         clientSettings,
+		}
+		sad.Call(ctx, "")
 	}
 	mem := sessions[session]
 
