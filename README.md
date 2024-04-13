@@ -1,7 +1,7 @@
 # LLocalSearch
 
 > [!IMPORTANT]
-> Discuss configurations and setups with other users at: https://discord.gg/Cm77Eav5mX
+> Discuss configurations and setups with other users at: https://discord.gg/Cm77Eav5mX. Help / Support is handled exclusively on GitHub to allow people with similar issues to find solutions more easily. 
 
 ## What it is
 
