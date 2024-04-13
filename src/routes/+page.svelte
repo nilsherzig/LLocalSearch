@@ -56,7 +56,6 @@
 	let showLogs = false;
 	let isDarkMode: boolean;
 	let showSettings = false;
-	let sessionString: string = 'default';
 
 	function setLocalStorage(key: string, value: string) {
 		if (typeof window === 'undefined') return;
@@ -122,7 +121,7 @@
 		}
 		eventSource = null;
 		logs = [];
-		sessionString = 'default';
+		clientValues.session = 'default';
 		showExamplePrompts = true;
 	}
 
@@ -155,7 +154,7 @@
 			let log: LogElement = JSON.parse(event.data);
 			if (log.stepType == StepType.HandleNewSession) {
 				console.log('new session', log.session);
-				sessionString = log.session;
+				clientValues.session = log.session;
 				return;
 			}
 			if (log.close) {
