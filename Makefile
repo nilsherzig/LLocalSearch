@@ -3,6 +3,10 @@ BACKEND_NAME ?= llocalsearch-backend
 FRONTEND_NAME ?= llocalsearch-frontend
 GIT_HASH := $(shell git rev-parse --short HEAD)
 
+PHONY: e2e-backend
+e2e-backend:
+	(cd ./backend && ginkgo -v -r ./...)
+
 # dev run commands
 PHONY: build-dev
 build-dev:
@@ -10,7 +14,15 @@ build-dev:
 	
 PHONY: dev
 dev: build-dev
-	docker-compose -f ./docker-compose.dev.yaml up
+	docker-compose -f ./docker-compose.dev.yaml up $(ARGS)
+
+PHONY: dev-bg
+dev-bg: build-dev
+	docker-compose -f ./docker-compose.dev.yaml up -d
+
+PHONY: dev-bg-stop
+dev-bg-stop: 
+	docker-compose -f ./docker-compose.dev.yaml down
 
 # normal hosting commands
 PHONY: run
