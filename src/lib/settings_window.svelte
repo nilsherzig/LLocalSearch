@@ -12,7 +12,7 @@
 	<div
 		in:fade={{ duration: 300 }}
 		out:fade={{ duration: 300 }}
-		class="fixed inset-0 z-10 flex flex-col items-center justify-center bg-opacity-10 dark:bg-opacity-40 bg-stone-950"
+		class="fixed backdrop-blur inset-0 z-10 flex flex-col items-center justify-center bg-opacity-20 dark:bg-opacity-80 bg-stone-950"
 	>
 		<div
 			use:clickOutside
