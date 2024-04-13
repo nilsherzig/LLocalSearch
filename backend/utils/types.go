@@ -9,11 +9,20 @@ type HttpJsonStreamElement struct {
 	Session  string   `json:"session"`
 }
 
-type ClientQuery struct {
-	Prompt        string `json:"prompt"`
-	MaxIterations int    `json:"maxIterations"`
-	ModelName     string `json:"modelName"`
-	Session       string `json:"session"`
+type ClientSettings struct {
+	ContextSize         int      `json:"contextSize"`
+	MaxIterations       int      `json:"maxIterations"`
+	ModelName           string   `json:"modelName"`
+	Prompt              string   `json:"prompt"`
+	Session             string   `json:"session"`
+	Temperature         float64  `json:"temperature"`
+	ToolNames           []string `json:"toolNames"`
+	WebSearchCategories []string `json:"webSearchCategories"`
+	AmountOfResults     int      `json:"amountOfResults"`
+	MinResultScore      float64  `json:"minResultScore"`
+	AmountOfWebsites    int      `json:"amountOfWebsites"`
+	ChunkSize           int      `json:"chunkSize"`
+	ChunkOverlap        int      `json:"chunkOverlap"`
 }
 
 type StepType string

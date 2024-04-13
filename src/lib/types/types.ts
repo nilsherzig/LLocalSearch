@@ -10,6 +10,22 @@ export type LogElement = {
     session: string;
 };
 
+export type ClientSettings = {
+    contextSize: number;
+    maxIterations: number;
+    modelName: string;
+    prompt: string;
+    temperature: number;
+    toolNames: string[];
+    webSearchCategories: string[];
+    session: string;
+    amountOfResults: number;
+    minResultScore: number;
+    amountOfWebsites: number;
+    chunkSize: number;
+    chunkOverlap: number;
+}
+
 export const enum StepType {
     HandleAgentAction = "HandleAgentAction",
     HandleAgentFinish = "HandleAgentFinish",

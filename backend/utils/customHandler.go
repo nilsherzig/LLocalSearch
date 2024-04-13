@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"unicode/utf8"
 
@@ -18,7 +19,6 @@ type CustomHandler struct {
 func (l CustomHandler) HandleLLMGenerateContentStart(_ context.Context, ms []llms.MessageContent) {
 	l.LogDebug("Entering LLM with messages:")
 	for _, m := range ms {
-		// TODO: Implement logging of other content types
 		var buf strings.Builder
 		for _, t := range m.Parts {
 			if t, ok := t.(llms.TextContent); ok {
@@ -98,6 +98,7 @@ func (l CustomHandler) HandleChainStart(_ context.Context, inputs map[string]any
 	}
 
 	charCount := utf8.RuneCountInString(string(chainValuesJson))
+	slog.Info("Entering chain", "tokens", (charCount / 4))
 
 	l.OutputChan <- HttpJsonStreamElement{
 		Message:  fmt.Sprintf("Entering chain with %d tokens: %s", (charCount / 4), chainValuesJson),
@@ -121,15 +122,10 @@ func (l CustomHandler) HandleChainEnd(_ context.Context, outputs map[string]any)
 func (l CustomHandler) HandleChainError(_ context.Context, err error) {
 	message := fmt.Sprintf("Exiting chain with error: %v", err)
 	fmt.Println(message)
-	// check if context is closed? # TODO seems stupid, just use the ctx handler
-	if l.OutputChan == nil {
-		fmt.Println("Output channel is nil")
-	} else {
-		l.OutputChan <- HttpJsonStreamElement{
-			Message:  message,
-			Stream:   false,
-			StepType: StepHandleChainError,
-		}
+	l.OutputChan <- HttpJsonStreamElement{
+		Message:  message,
+		Stream:   false,
+		StepType: StepHandleChainError,
 	}
 }
 

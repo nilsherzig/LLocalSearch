@@ -1,34 +1,40 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import type { LogElement } from '$lib/types/types';
+	import type { LogElement, ClientSettings as ClientValues } from '$lib/types/types';
 	import { StepType } from '$lib/types/types';
 	import { onDestroy, onMount } from 'svelte';
 	import LogItem from '$lib/log_item.svelte';
 	import BottomBar from '$lib/bottom_bar.svelte';
 	import ToggleLogsButton from '$lib/toggle_logs_button.svelte';
 	import ToggleDarkmodeButton from '$lib/toggle_darkmode_button.svelte';
-	import ModelSwitchWindow from '$lib/model_switch_window.svelte';
+	import SettingsWindow from '$lib/settings_window.svelte';
 	import ToggleModelSwitch from '$lib/toggle_model_switch.svelte';
 
 	let eventSource: EventSource | null = null;
-	let prompt = '';
 	let sendMode = true;
 
-	let showModelSwitchWindow = false;
 	let models: string[];
 
-	let currentModel: string;
+	let skipSetLocalStorage = true;
 
-	$: setLocalStorage('currentModel', currentModel);
+	let scrollContainer: HTMLElement;
 
-	function setLocalStorage(key: string, value: string) {
-		if (typeof window === 'undefined') return;
-		if (value === undefined) {
-			return;
-		}
-		console.log('setting local storage', key, value);
-		localStorage.setItem(key, value);
-	}
+	let clientValues: ClientValues = {
+		// default values, will be overwritten by local storage if available
+		maxIterations: 30,
+		contextSize: 8 * 1024,
+		temperature: 0.0,
+		modelName: 'adrienbrault/nous-hermes2pro:Q8_0',
+		prompt: '',
+		toolNames: [],
+		webSearchCategories: [],
+		session: 'default',
+		amountOfResults: 4,
+		minResultScore: 0.5,
+		amountOfWebsites: 10,
+		chunkSize: 300,
+		chunkOverlap: 100
+	};
 
 	let showExamplePrompts = true;
 	let examplePrompts = [
@@ -38,7 +44,7 @@
 		'Pixel 7 camera specs',
 		'whats up with the drama around apple and progressive web apps?',
 		'how much do OpenAI and Microsoft plan to spend on their new datacenter?',
-		'what is "LLocalSearch"?'
+		'when is llama3 going to be releaesed?'
 	];
 
 	let lastElemWasStream = false;
@@ -47,7 +53,23 @@
 
 	let showLogs = false;
 	let isDarkMode: boolean;
+	let showSettings = false;
 	let sessionString: string = 'default';
+
+	function setLocalStorage(key: string, value: string) {
+		if (typeof window === 'undefined') return;
+
+		if (skipSetLocalStorage) {
+			skipSetLocalStorage = false;
+			return;
+		}
+
+		if (value === undefined) {
+			return;
+		}
+		console.log('setting local storage', key, value);
+		localStorage.setItem(key, value);
+	}
 
 	function changeDarkMode(isDarkMode: boolean) {
 		if (typeof window === 'undefined') return;
@@ -66,19 +88,20 @@
 	}
 
 	$: changeDarkMode(isDarkMode);
+	$: setLocalStorage('clientSettings', JSON.stringify(clientValues));
 
 	onMount(() => {
-		fetch('/api/modellist')
+		fetch('/api/models')
 			.then((response) => response.json())
 			.then((data) => {
 				models = data;
 			});
 
-		if (localStorage.currentModel) {
-			currentModel = localStorage.currentModel;
-		} else {
-			currentModel = 'knoopx/hermes-2-pro-mistral:7b-q8_0'; // default model
+		if (localStorage.clientSettings) {
+			clientValues = JSON.parse(localStorage.clientSettings);
+			console.log('loaded client settings', clientValues);
 		}
+
 		if (
 			localStorage.theme === 'dark' ||
 			(!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -111,16 +134,19 @@
 	// Establish a connection to the server-sent events endpoint
 	function sendPrompt() {
 		showExamplePrompts = false;
-		let url =
-			'/api/stream?prompt=' + prompt + '&session=' + sessionString + '&modelname=' + currentModel;
+
+		let clientSettingsJsonString = JSON.stringify(clientValues);
+
+		let url = '/api/stream?settings=' + encodeURIComponent(clientSettingsJsonString);
+
 		let newLogElement: LogElement = {
-			message: `${prompt}`,
+			message: `${clientValues.prompt}`,
 			stepType: StepType.HandleUserPrompt
 		};
 
 		logs.push(newLogElement);
 		sendMode = false;
-		prompt = '';
+		clientValues.prompt = '';
 		logs = logs;
 		eventSource = new EventSource(url);
 		eventSource.onmessage = (event: MessageEvent) => {
@@ -178,12 +204,12 @@
 			eventSource = null;
 			sendMode = true;
 		};
+		onMountHasRun = true;
 	}
 	onDestroy(() => {
 		eventSource?.close();
 	});
 
-	let scrollContainer: HTMLElement;
 	function scollToElement(elem: LogElement) {
 		if (scrollContainer === undefined) {
 			return;
@@ -207,7 +233,7 @@
 	/>
 </svelte:head>
 
-<ModelSwitchWindow bind:models bind:showModelSwitchWindow bind:currentModel></ModelSwitchWindow>
+<SettingsWindow bind:models bind:clientSettings={clientValues} bind:showSettings></SettingsWindow>
 <div class="w-screen flex flex-col transition-all">
 	<div class="px-2 flex items-center flex-col h-full overflow-scroll">
 		<div class="py-24 align-middle" bind:this={scrollContainer}>
@@ -219,7 +245,7 @@
 								class="bg-stone-50 text-stone-700 py-2 px-6 rounded-lg shadow border-stone-300 border-2 hover:border-stone-400 transition-all dark:bg-stone-900 dark:border-stone-700 dark:text-stone-400 dark:hover:border-stone-500"
 								tabindex="-1"
 								on:click={() => {
-									prompt = examplePrompt;
+									clientValues.prompt = examplePrompt;
 									sendPrompt();
 								}}
 							>
@@ -241,11 +267,16 @@
 	<div
 		class="flex p-4 justify-between dark:bg-stone-950 bg-stone-200 lg:bg-transparent lg:dark:bg-transparent lg:bg-gradient-to-b lg:from-stone-200 lg:to-transparent lg:dark:from-stone-950 transition-all"
 	>
-		<div>
-			<ToggleModelSwitch bind:currentModel bind:showModelSwitchWindow></ToggleModelSwitch>
-		</div>
+		<ToggleModelSwitch
+			bind:showModelSwitchWindow={showSettings}
+			bind:currentModel={clientValues.modelName}
+		></ToggleModelSwitch>
+		<!-- <div> -->
+		<!-- 	<span class="text-stone-600 dark:text-stone-500 p-2"> -->
+		<!-- 		{clientValues.modelName} -->
+		<!-- 	</span> -->
+		<!-- </div> -->
 		<div class="flex flex-row">
-			<!-- dont show log toggle when there are no logs -->
 			{#if logs.length > 0}
 				<ToggleLogsButton bind:showLogs></ToggleLogsButton>
 			{/if}
@@ -258,7 +289,13 @@
 <div
 	class="fixed bottom-0 w-full transition-all bg-gradient-to-t from-stone-200 to-transparent dark:from-stone-950"
 >
-	<BottomBar bind:sendMode bind:eventSource bind:prompt {sendPrompt} {resetChat} {stopChat}
+	<BottomBar
+		bind:sendMode
+		bind:eventSource
+		bind:prompt={clientValues.prompt}
+		{sendPrompt}
+		{resetChat}
+		{stopChat}
 	></BottomBar>
 </div>
 

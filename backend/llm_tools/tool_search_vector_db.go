@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/nilsherzig/localLLMSearch/utils"
+	"github.com/nilsherzig/LLocalSearch/utils"
 	"github.com/tmc/langchaingo/callbacks"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/tools"
@@ -20,6 +20,7 @@ import (
 type SearchVectorDB struct {
 	CallbacksHandler callbacks.Handler
 	SessionString    string
+	Settings         utils.ClientSettings
 }
 
 var _ tools.Tool = SearchVectorDB{}
@@ -32,7 +33,7 @@ type Result struct {
 var usedResults = make(map[string][]string)
 
 func (c SearchVectorDB) Description() string {
-	return `Usefull for searching through added files and websites. Search for keywords in the text not whole questions, avoid relative words like "yesterday" think about what could be in the text. 
+	return `Usefull for searching through added files and websites. Also contains the results from all old searches. Search for keywords in the text not whole questions, avoid relative words like "yesterday" think about what could be in the text. 
     The input to this tool will be run against a vector db. The top results will be returned as json.`
 }
 
@@ -41,8 +42,6 @@ func (c SearchVectorDB) Name() string {
 }
 
 func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) {
-	amountOfResults := 3
-	scoreThreshold := 0.4
 	if c.CallbacksHandler != nil {
 		c.CallbacksHandler.HandleToolStart(ctx, input)
 	}
@@ -69,10 +68,10 @@ func (c SearchVectorDB) Call(ctx context.Context, input string) (string, error) 
 	}
 
 	options := []vectorstores.Option{
-		vectorstores.WithScoreThreshold(float32(scoreThreshold)),
+		vectorstores.WithScoreThreshold(float32(c.Settings.MinResultScore)),
 	}
 
-	retriver := vectorstores.ToRetriever(store, amountOfResults, options...)
+	retriver := vectorstores.ToRetriever(store, c.Settings.AmountOfResults, options...)
 	docs, err := retriver.GetRelevantDocuments(context.Background(), input)
 	if err != nil {
 		return "", err

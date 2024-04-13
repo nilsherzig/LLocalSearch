@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nilsherzig/localLLMSearch/utils"
+	"github.com/nilsherzig/LLocalSearch/utils"
 	"github.com/tmc/langchaingo/callbacks"
 	"github.com/tmc/langchaingo/tools"
 )
@@ -19,6 +19,7 @@ import (
 type WebSearch struct {
 	CallbacksHandler callbacks.Handler
 	SessionString    string
+	Settings         utils.ClientSettings
 }
 
 var usedLinks = make(map[string][]string)
@@ -26,7 +27,7 @@ var usedLinks = make(map[string][]string)
 var _ tools.Tool = WebSearch{}
 
 func (c WebSearch) Description() string {
-	return `Usefull for searching the internet. You have to use this tool if you're not 100% certain. The top 10 results will be added to the vector db. The top 3 results are also getting returned to you directly. For more serch queries through the same websites, use the VectorDB tool.`
+	return `Usefull for searching the internet. The top 10 results will be added to the vector db. The top 3 results are also getting returned to you directly. For more serch queries through the same websites, use the VectorDB tool.`
 }
 
 func (c WebSearch) Name() string {
@@ -66,7 +67,7 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 			}
 		}
 
-		if counter > 10 {
+		if counter >= ws.Settings.AmountOfWebsites {
 			break
 		}
 
@@ -79,15 +80,15 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 		wg.Add(1)
 		go func(i int) {
 			defer func() {
+				wg.Done()
 				if r := recover(); r != nil {
 					slog.Error("Recovered from panic", "error", r)
 				}
 			}()
 
-			err := utils.DownloadWebsiteToVectorDB(ctx, apiResponse.Results[i].URL, ws.SessionString)
+			err := utils.DownloadWebsiteToVectorDB(context.Background(), apiResponse.Results[i].URL, ws.SessionString, ws.Settings.ChunkSize, ws.Settings.ChunkOverlap)
 			if err != nil {
 				slog.Warn("Error downloading website", "error", err)
-				wg.Done()
 				return
 			}
 			ch, ok := ws.CallbacksHandler.(utils.CustomHandler)
@@ -100,7 +101,6 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 				ch.HandleSourceAdded(ctx, newSource)
 				usedLinks[ws.SessionString] = append(usedLinks[ws.SessionString], apiResponse.Results[i].URL)
 			}
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
@@ -108,6 +108,7 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 		SearchVectorDB{
 			CallbacksHandler: nil,
 			SessionString:    ws.SessionString,
+			Settings:         ws.Settings,
 		},
 		context.Background(), input)
 	if err != nil {

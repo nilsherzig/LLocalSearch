@@ -10,7 +10,6 @@
 		<div
 			class="m-4 max-w-fit bg-stone-200 p-2 rounded-lg shadow-lg border-2 border-stone-300 dark:bg-stone-950 dark:border-stone-800 dark:text-stone-300 max-h-72 overflow-scroll"
 		>
-			<p class="font-bold"></p>
 			<div class="flex flex-col">
 				{#each models as model}
 					<button

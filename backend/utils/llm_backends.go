@@ -15,11 +15,14 @@ var EmbeddingsModel = os.Getenv("EMBEDDINGS_MODEL_NAME")
 
 func NewOllamaEmbeddingLLM() (*ollama.LLM, error) {
 	modelName := EmbeddingsModel
-	return NewOllama(modelName)
+	return NewOllama(modelName, (1024 * 8))
 }
 
-func NewOllama(modelName string) (*ollama.LLM, error) {
-	return ollama.New(ollama.WithModel(modelName), ollama.WithServerURL(os.Getenv("OLLAMA_HOST")), ollama.WithRunnerNumCtx(16000))
+func NewOllama(modelName string, contextSize int) (*ollama.LLM, error) {
+	return ollama.New(ollama.WithModel(modelName),
+		ollama.WithServerURL(os.Getenv("OLLAMA_HOST")),
+		ollama.WithRunnerNumCtx(contextSize), // TODO use the contextSize field from the request struct for this
+	)
 }
 
 func GetSessionString() string {

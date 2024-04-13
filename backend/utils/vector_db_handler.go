@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/microcosm-cc/bluemonday"
 
@@ -58,7 +57,7 @@ func saveToVectorDb(timeoutCtx context.Context, docs []schema.Document, sessionS
 	return nil
 }
 
-func DownloadWebsiteToVectorDB(ctx context.Context, url string, sessionString string) error {
+func DownloadWebsiteToVectorDB(ctx context.Context, url string, sessionString string, chunkSize int, chunkOverlap int) error {
 	// log.Printf("downloading: %s", url)
 	html, err := DownloadWebsiteText(url)
 	if err != nil {
@@ -75,12 +74,9 @@ func DownloadWebsiteToVectorDB(ctx context.Context, url string, sessionString st
 	splitter := textsplitter.NewTokenSplitter(
 		textsplitter.WithSeparators([]string{"\n\n", "\n"}),
 	)
-	splitter.ChunkOverlap = 100
-	splitter.ChunkSize = 300
+	splitter.ChunkSize = chunkSize
+	splitter.ChunkOverlap = chunkOverlap
 	docs, err := vectorLoader.LoadAndSplit(ctx, splitter)
-	// for i := range docs {
-	// 	log.Printf("doc %d: %s", i, docs[i].PageContent)
-	// }
 
 	for i := range docs {
 		docs[i].Metadata = map[string]interface{}{
@@ -88,10 +84,10 @@ func DownloadWebsiteToVectorDB(ctx context.Context, url string, sessionString st
 		}
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	// timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// defer cancel()
 
-	err = saveToVectorDb(timeoutCtx, docs, sessionString)
+	err = saveToVectorDb(context.Background(), docs, sessionString)
 	if err != nil {
 		return err
 	}

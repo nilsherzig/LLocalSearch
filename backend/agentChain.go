@@ -4,24 +4,24 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
-	"github.com/nilsherzig/localLLMSearch/llm_tools"
-	"github.com/nilsherzig/localLLMSearch/utils"
+	"github.com/nilsherzig/LLocalSearch/llm_tools"
+	"github.com/nilsherzig/LLocalSearch/utils"
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/memory"
+	"github.com/tmc/langchaingo/schema"
 	"github.com/tmc/langchaingo/tools"
 )
 
-func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStreamElement, userQuery utils.ClientQuery) error {
+func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStreamElement, clientSettings utils.ClientSettings) error {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("Recovered from panic", "error", r)
 		}
 	}()
 
-	neededModels := []string{utils.EmbeddingsModel, userQuery.ModelName}
+	neededModels := []string{utils.EmbeddingsModel, clientSettings.ModelName}
 	for _, modelName := range neededModels {
 		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
 			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
@@ -34,17 +34,21 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		}
 	}
 
-	startTime := time.Now()
-
-	if userQuery.Session == "default" {
-		userQuery.Session = utils.GetSessionString()
+	if clientSettings.Session == "default" {
+		clientSettings.Session = utils.GetSessionString()
 	}
-	session := userQuery.Session
+
+	session := clientSettings.Session
 
 	if sessions[session] == nil {
 		slog.Info("Creating new session", "session", session)
 		sessions[session] = memory.NewConversationBuffer()
 		memory.NewChatMessageHistory()
+
+		sessions[session].ChatHistory.AddMessage(ctx, schema.SystemChatMessage{
+			Content: utils.GenerateSystemMessage(),
+		})
+
 		outputChan <- utils.HttpJsonStreamElement{
 			StepType: utils.StepHandleNewSession,
 			Session:  session,
@@ -53,11 +57,11 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}
 	mem := sessions[session]
 
-	slog.Info("Starting agent chain", "session", session, "userQuery", userQuery, "startTime", startTime)
+	slog.Info("Starting agent chain", "session", session, "userQuery", clientSettings)
 
-	llm, err := utils.NewOllama(userQuery.ModelName)
+	llm, err := utils.NewOllama(clientSettings.ModelName, clientSettings.ContextSize)
 	if err != nil {
-		slog.Warn("Error creating new LLM", "error", err)
+		slog.Error("Error creating new LLM", "error", err)
 		return err
 	}
 
@@ -68,12 +72,12 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 				OutputChan: outputChan,
 			},
 			SessionString: session,
+			Settings:      clientSettings,
 		},
 		llm_tools.SearchVectorDB{
-			CallbacksHandler: utils.CustomHandler{
-				OutputChan: outputChan,
-			},
-			SessionString: session,
+			CallbacksHandler: utils.CustomHandler{OutputChan: outputChan},
+			SessionString:    session,
+			Settings:         clientSettings,
 		},
 	}
 
@@ -90,38 +94,33 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 			slog.Error("Parsing Error", "error", s)
 			return utils.ParsingErrorPrompt()
 		})),
-
-		agents.WithMaxIterations(userQuery.MaxIterations),
+		agents.WithMaxIterations(clientSettings.MaxIterations),
 		agents.WithCallbacksHandler(utils.CustomHandler{
 			OutputChan: outputChan,
 		}),
 		agents.WithMemory(mem),
 	)
-
 	if err != nil {
 		return err
 	}
 
+	// TODO: replace this with something smarter
+	// currently used to tell the frotend, that everything worked so far
+	// and the request is now going to be send to ollama
 	outputChan <- utils.HttpJsonStreamElement{
 		StepType: utils.StepHandleOllamaStart,
 	}
 
-	temp := 0.0
-	prompt := fmt.Sprintf(`
-    1. Format your answer (after AI:) in markdown. 
-    2. You have to use your tools to answer questions. 
-    3. You have to provide the sources / links you've used to answer the quesion.
-    4. You may use tools more than once.
-    5. Create your reply in the same language as the search string.
-    Question: %s`, userQuery.Prompt)
-	_, err = chains.Run(ctx, executor, prompt, chains.WithTemperature(temp))
+	temp := clientSettings.Temperature
+
+	ans, err := chains.Run(ctx, executor, clientSettings.Prompt, chains.WithTemperature(temp))
 	if err != nil {
 		return err
 	}
+	slog.Info("Ended agent chain", "session", session, "userQuery", clientSettings, "answer", ans)
 
 	outputChan <- utils.HttpJsonStreamElement{
 		Close: true,
 	}
-
 	return nil
 }
