@@ -105,7 +105,7 @@
 				<div>
 					<p>The llm uses the following system message:</p>
 					<textarea
-						class="bg-stone-200 dark:bg-stone-800 px-1 py-0.5 rounded w-full"
+						class="bg-stone-200 dark:bg-stone-800 p-2 rounded w-full"
 						rows="5"
 						bind:value={clientSettings.systemMessage}
 					/>
