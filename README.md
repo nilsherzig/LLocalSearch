@@ -9,12 +9,9 @@
 
 LLocalSearch is a completely locally running search aggregator using LLM Agents. The user can ask a question and the system will use a chain of LLMs to find the answer. The user can see the progress of the agents and the final answer. No OpenAI or Google API keys are needed.
 
-Now with follow-up questions: 
+### Demo
 
-https://github.com/nilsherzig/LLocalSearch/assets/72463901/8323be25-de2a-4ddf-853b-4a01557b5599
-
-
-![image](https://github.com/nilsherzig/LLocalSearch/assets/72463901/9f6497aa-8047-4d11-9a12-66aff65d3faa)
+https://github.com/nilsherzig/LLocalSearch/assets/72463901/86ab3175-ac5a-48cf-bba6-73b4380d06d8
 
 ## Features 
 
