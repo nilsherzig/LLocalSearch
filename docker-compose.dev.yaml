@@ -6,10 +6,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
       - CHROMA_DB_URL=${CHROMA_DB_URL:-http://chromadb:8000}
       - SEARXNG_DOMAIN=${SEARXNG_DOMAIN:-http://searxng:8080}
-      - MAX_ITERATIONS=${MAX_ITERATIONS:-30}
       - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-nomic-embed-text:v1.5}
     networks:
       - llm_network_dev
@@ -70,6 +69,50 @@ services:
         max-size: '1m'
         max-file: '1'
 
+  #####################################
+  # the following is an example how you could run
+  # ollama inside the "llm_network_dev" network
+  # this allows the backend to connect to
+  # ollama using the following url
+  #
+  # http://ollama:11434 as OLLAMA_HOST (default value)
+  #
+  # 🔴 Before running this, make sure you have
+  # read this: https://hub.docker.com/r/ollama/ollama
+  #####################################
+
+  # if you have an AMD GPU
+  # ollama:
+  #   image: ollama/ollama:rocm
+  #   # this overwrite is only needed if your amd gpu is not officially supported by rocm
+  #   # environment:
+  #   #   - HSA_OVERRIDE_GFX_VERSION=10.3.0
+  #   devices:
+  #     - /dev/kfd
+  #     - /dev/dri
+  #   volumes:
+  #     - ollama:/root/.ollama
+  #   networks:
+  #     - llm_network_dev
+
+  # if you have an NVIDIA GPU
+  # ollama:
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities:
+  #               - gpu
+  #   volumes:
+  #     - ollama:/root/.ollama
+  #   ports:
+  #     - 11434:11434
+  #   image: ollama/ollama
+  #   networks:
+  #     - llm_network_dev
+
 networks:
   llm_network_dev:
     driver: bridge
@@ -79,3 +122,6 @@ networks:
 
 volumes:
   redis-data:
+  ollama:
+    external: true
+    name: ollama
