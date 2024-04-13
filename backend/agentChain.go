@@ -46,7 +46,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		memory.NewChatMessageHistory()
 
 		sessions[session].ChatHistory.AddMessage(ctx, schema.SystemChatMessage{
-			Content: utils.GenerateSystemMessage(),
+			Content: clientSettings.SystemMessage,
 		})
 
 		outputChan <- utils.HttpJsonStreamElement{

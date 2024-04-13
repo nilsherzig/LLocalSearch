@@ -33,7 +33,12 @@
 		minResultScore: 0.5,
 		amountOfWebsites: 10,
 		chunkSize: 300,
-		chunkOverlap: 100
+		chunkOverlap: 100,
+		systemMessage: ` 1. Format your answer in markdown.
+2. You have to use your tools to answer questions.
+3. You have to provide sources / links you've used to answer the question.
+4. You may use tools more than once.
+5. Answer in the same language as the question.`
 	};
 
 	let clientValues: ClientValues = defaultClientValues;
@@ -68,7 +73,7 @@
 		if (value === undefined) {
 			return;
 		}
-		console.log('setting local storage', key, value);
+		// console.log('setting local storage', key, value);
 		localStorage.setItem(key, value);
 	}
 
@@ -139,6 +144,8 @@
 		let clientSettingsJsonString = JSON.stringify(clientValues);
 
 		let url = '/api/stream?settings=' + encodeURIComponent(clientSettingsJsonString);
+		// console.log(url);
+		// console.log(clientSettingsJsonString);
 
 		let newLogElement: LogElement = {
 			message: `${clientValues.prompt}`,

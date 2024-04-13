@@ -24,6 +24,7 @@ export type ClientSettings = {
     amountOfWebsites: number;
     chunkSize: number;
     chunkOverlap: number;
+    systemMessage: string;
 }
 
 export const enum StepType {

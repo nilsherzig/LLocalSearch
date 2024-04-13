@@ -23,6 +23,7 @@ type ClientSettings struct {
 	AmountOfWebsites    int      `json:"amountOfWebsites"`
 	ChunkSize           int      `json:"chunkSize"`
 	ChunkOverlap        int      `json:"chunkOverlap"`
+	SystemMessage       string   `json:"systemMessage"`
 }
 
 type StepType string
