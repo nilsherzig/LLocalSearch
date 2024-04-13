@@ -19,7 +19,7 @@
 
 	let scrollContainer: HTMLElement;
 
-	let clientValues: ClientValues = {
+	const defaultClientValues: ClientValues = {
 		// default values, will be overwritten by local storage if available
 		maxIterations: 30,
 		contextSize: 8 * 1024,
@@ -35,6 +35,8 @@
 		chunkSize: 300,
 		chunkOverlap: 100
 	};
+
+	let clientValues: ClientValues = defaultClientValues;
 
 	let showExamplePrompts = true;
 	let examplePrompts = [
@@ -233,7 +235,12 @@
 	/>
 </svelte:head>
 
-<SettingsWindow bind:models bind:clientSettings={clientValues} bind:showSettings></SettingsWindow>
+<SettingsWindow
+	{defaultClientValues}
+	bind:models
+	bind:clientSettings={clientValues}
+	bind:showSettings
+></SettingsWindow>
 <div class="w-screen flex flex-col transition-all">
 	<div class="px-2 flex items-center flex-col h-full overflow-scroll">
 		<div class="py-24 align-middle" bind:this={scrollContainer}>

@@ -5,6 +5,7 @@
 	export let showSettings: boolean;
 	export let clientSettings: ClientSettings;
 	export let models: string[];
+	export let defaultClientValues: ClientSettings;
 	import { clickOutside } from './clickOutside.js';
 </script>
 
@@ -27,28 +28,56 @@
                 "
 			>
 				<p class="font-bold p-1">Settings</p>
-				<button
-					class="rounded-lg p-1 dark:bg-stone-900 bg-stone-50 hover:cursor-pointer hover:bg-stone-200 hover:text-stone-800 dark:hover:text-stone-300 transition-all dark:hover:bg-stone-800"
-					on:click={() => {
-						showSettings = false;
-					}}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						class="w-6 h-6"
-					>
-						<path
-							in:draw={{ duration: 300 }}
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M6 18 18 6M6 6l12 12"
-						/>
-					</svg>
-				</button>
+				<div>
+					<span title="reset settings">
+						<button
+							class="rounded-lg p-1 dark:bg-stone-900 bg-stone-50 hover:cursor-pointer hover:bg-stone-200 hover:text-stone-800 dark:hover:text-stone-300 transition-all dark:hover:bg-stone-800"
+							on:click={() => {
+								clientSettings = JSON.parse(JSON.stringify(defaultClientValues)); // holy fuck i hate js
+							}}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="w-6 h-6"
+							>
+								<path
+									in:draw={{ duration: 300 }}
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+								/>
+							</svg>
+						</button>
+					</span>
+					<span title="close settings">
+						<button
+							class="rounded-lg p-1 dark:bg-stone-900 bg-stone-50 hover:cursor-pointer hover:bg-stone-200 hover:text-stone-800 dark:hover:text-stone-300 transition-all dark:hover:bg-stone-800"
+							on:click={() => {
+								showSettings = false;
+							}}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="w-6 h-6"
+							>
+								<path
+									in:draw={{ duration: 300 }}
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M6 18 18 6M6 6l12 12"
+								/>
+							</svg>
+						</button>
+					</span>
+				</div>
 			</div>
 
 			<div class="flex flex-col gap-2">
@@ -84,7 +113,7 @@
 				<SettingsField
 					bind:value={clientSettings.contextSize}
 					maxValue={128000}
-					minValue={0}
+					minValue={1}
 					stepSize={1024}
 					descriptionBefore="The agent will have a context size of"
 					descriptionAfter="tokens."
@@ -92,7 +121,7 @@
 				<SettingsField
 					bind:value={clientSettings.maxIterations}
 					maxValue={50}
-					minValue={0}
+					minValue={1}
 					stepSize={1}
 					descriptionBefore="The agent will perform a maximum of"
 					descriptionAfter="iterations (actions and evaluations) per question."
@@ -109,7 +138,7 @@
 				<SettingsField
 					bind:value={clientSettings.amountOfResults}
 					maxValue={30}
-					minValue={0}
+					minValue={1}
 					stepSize={1}
 					descriptionBefore="A db query will return a maximum of"
 					descriptionAfter="results."

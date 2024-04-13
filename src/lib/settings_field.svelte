@@ -5,59 +5,36 @@
 	export let maxValue: number;
 	export let minValue: number;
 	export let stepSize: number;
-	let bufferValue = value;
+	let inputValue = value;
+	let showRange = false;
 
-	function validateValue(bv: number) {
-		if (bv == null) {
-			bv = minValue;
-		}
-
-		if (bv < minValue) {
-			// bv = minValue;
+	function validateValue(iv: number) {
+		if (
+			iv < minValue ||
+			iv > maxValue ||
+			isNaN(iv) ||
+			iv == null ||
+			iv == undefined ||
+			iv == Infinity ||
+			iv == -Infinity
+		) {
+			showRange = true;
 			return;
 		}
 
-		if (bv > maxValue) {
-			// bv = maxValue;
-			return;
-		}
-
-		bufferValue = bv;
-		value = bv;
+		showRange = false;
+		inputValue = iv;
+		value = iv;
 	}
 
-	$: bufferValue = value;
-	$: validateValue(bufferValue);
+	// if the value changes somewhere else
+	// (i.e. loaded from local storage or settings reset)
+	$: validateValue(value);
+
+	// if the user changes as value
+	$: validateValue(inputValue);
 
 	let inputElement: HTMLInputElement;
-
-	// Function to adjust the input width
-	// const adjustInputWidth = () => {
-	// 	if (typeof window === 'undefined') return;
-	// 	console.log('adjusting input width');
-	// 	const tempElement = document.createElement('span');
-	// 	tempElement.style.visibility = 'hidden';
-	// 	tempElement.style.position = 'absolute';
-	// 	tempElement.style.height = 'auto';
-	// 	tempElement.style.width = 'auto';
-	// 	tempElement.style.whiteSpace = 'pre';
-	// 	// Apply the same font styling as your input for accurate measurement
-	// 	tempElement.style.font = getComputedStyle(inputElement).font;
-	// 	document.body.appendChild(tempElement);
-	//
-	// 	// Update the content of the temporary element with the input's value
-	// 	tempElement.textContent = inputElement.value || inputElement.placeholder;
-	//
-	// 	// Adjust the input width based on the temporary element's width
-	// 	inputElement.style.width = `${tempElement.offsetWidth + 2}px`; // +2 for border or padding adjustments
-	//
-	// 	// Clean up
-	// 	document.body.removeChild(tempElement);
-	// };
-
-	// onMount(() => {
-	// 	adjustInputWidth(); // Adjust width on initial load
-	// });
 </script>
 
 <div class="flex flex-col">
@@ -69,12 +46,17 @@
         "
 			type="number"
 			bind:this={inputElement}
-			bind:value={bufferValue}
+			bind:value={inputValue}
 			min={minValue}
 			max={maxValue}
 			step={stepSize}
 		/>
 		{descriptionAfter}
+	</p>
+	<p>
+		{#if showRange}
+			<span class="text-red-500">Value must be between {minValue} and {maxValue}</span>
+		{/if}
 	</p>
 	<!-- <input -->
 	<!-- 	class="rounded p-1" -->
