@@ -21,7 +21,7 @@ OLLAMA_HOST=host.docker.internal:11434
 ```
 
 > [!WARNING]
-> Some linux users reported that this solution requires docker desktop to be installed. Please report back if that's the case for you. I don't have this issue on NixOS.
+> Some linux users reported that this solution requires docker desktop to be installed. Please report back if that's the case for you. I don't have this issue on NixOS or my Ubuntu 22.04 test box.
 
 ### You're using Windows
 
