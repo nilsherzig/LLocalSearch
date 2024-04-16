@@ -71,9 +71,3 @@ make dev
 If you don't have `make` installed, you can run the commands inside the Makefile manually.
 
 Now you should be able to access the frontend on [http://localhost:3000](http://localhost:3000).
-
-## stars
-
-Kinda looks like im botting haha
-
-[![Star History Chart](https://api.star-history.com/svg?repos=nilsherzig/LLocalSearch&type=Date)](https://star-history.com/#nilsherzig/LLocalSearch&Date)
