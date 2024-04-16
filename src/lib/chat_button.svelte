@@ -10,7 +10,7 @@
 </script>
 
 <div
-	class="text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer transition-all dark:text-stone-500 dark:hover:text-stone-200 dark:active:bg-stone-700"
+	class="text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer transition-all dark:text-stone-500 dark:hover:text-stone-200"
 >
 	{#if sendMode && prompt != ''}
 		<span title="send message">
