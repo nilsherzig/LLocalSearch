@@ -30,7 +30,7 @@ This project is still in its very early days. Expect some bugs.
 
 Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get the most up-to-date idea.
 
-## Self-hosting & Development
+## Install
 
 ### Requirements
 
