@@ -54,9 +54,9 @@ docker-compose up
 
 🎉 You should now be able to open the web interface on http://localhost:3000. Nothing else is exposed by default.
 
-### Run the current git version 
+### Run the development version
 
-Newer features, but potentially less stable.
+Only recommended if you want to contribute to this project.
 
 ```bash
 git clone https://github.com/nilsherzig/LLocalsearch.git
