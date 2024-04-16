@@ -29,7 +29,14 @@
 				<div
 					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-600 border-2 dark:bg-stone-800 dark:text-stone-200"
 				>
-					<span>{logElement.message}</span>
+					{#if logElement.message.includes('Parsing Error.')}
+						<span
+							>Looks like the LLM didn't respond in the right format. It will try again. Consider
+							using a LLM trained on structured output or function calling.</span
+						>
+					{:else}
+						<span>{logElement.message}</span>
+					{/if}
 				</div>
 				<!-- ollama model load message -->
 			{:else if logElement.stepType == StepType.HandleOllamaModelLoadMessage}
