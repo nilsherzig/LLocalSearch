@@ -3,7 +3,7 @@
 	import ChatButton from './chat_button.svelte';
 	export let prompt: string;
 	export let sendPrompt: () => void;
-	export let resetChat: () => void;
+	export let newChat: () => void;
 	export let sendMode = true;
 	let textArea: HTMLTextAreaElement;
 	export let eventSource: EventSource | null;
@@ -51,7 +51,7 @@
 				placeholder="Ask me something about llamas..."
 				autofocus
 			></textarea>
-			<ChatButton {prompt} bind:sendMode bind:eventSource {sendPrompt} {resetChat} {stopChat} />
+			<ChatButton {prompt} bind:sendMode bind:eventSource {sendPrompt} {newChat} {stopChat} />
 		</form>
 	</div>
 </div>

@@ -5,8 +5,8 @@ RUN npm ci
 COPY . .
 RUN npm run build
 # RUN npm prune --production
-EXPOSE 4173
-CMD ["npm", "run", "preview", "--", "--host"]
+# EXPOSE 4173
+# CMD ["npm", "run", "preview", "--", "--host"]
 
 # FROM node:20-alpine3.19
 # WORKDIR /app

@@ -16,7 +16,7 @@ import (
 	"github.com/tmc/langchaingo/tools"
 )
 
-type WebSearch struct {
+type WebScrape struct {
 	CallbacksHandler callbacks.Handler
 	SessionString    string
 	Settings         utils.ClientSettings
@@ -24,9 +24,9 @@ type WebSearch struct {
 
 var usedLinks = make(map[string][]string)
 
-var _ tools.Tool = WebSearch{}
+var _ tools.Tool = WebScrape{}
 
-func (c WebSearch) Description() string {
+func (c WebScrape) Description() string {
 	return `Use this tool to search for websites that may answer your search query. The best websites (according to the search engine) are broken down into small parts and added to your vector database. 
 
 The parts of these websites that are most similar to your search query will be returned to you directly. 
@@ -34,11 +34,11 @@ The parts of these websites that are most similar to your search query will be r
 You can query the vector database later with other inputs to get other parts of these websites.`
 }
 
-func (c WebSearch) Name() string {
-	return "WS"
+func (c WebScrape) Name() string {
+	return "webscrape"
 }
 
-func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
+func (ws WebScrape) Call(ctx context.Context, input string) (string, error) {
 	if ws.CallbacksHandler != nil {
 		ws.CallbacksHandler.HandleToolStart(ctx, input)
 	}
@@ -65,10 +65,16 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 	wg := sync.WaitGroup{}
 	counter := 0
 	for i := range apiResponse.Results {
+		skip := false
 		for _, usedLink := range usedLinks[ws.SessionString] {
 			if usedLink == apiResponse.Results[i].URL {
-				continue
+				skip = true
+				break
 			}
+		}
+
+		if skip {
+			continue
 		}
 
 		if counter >= ws.Settings.AmountOfWebsites {
@@ -98,25 +104,27 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 			ch, ok := ws.CallbacksHandler.(utils.CustomHandler)
 			if ok {
 				newSource := utils.Source{
-					Name: "WebSearch",
-					Link: apiResponse.Results[i].URL,
+					Name:    "WebSearch",
+					Link:    apiResponse.Results[i].URL,
+					Summary: apiResponse.Results[i].Content,
+					Title:   apiResponse.Results[i].Title,
+					Engine:  apiResponse.Results[i].Engine,
 				}
 
 				ch.HandleSourceAdded(ctx, newSource)
-				usedLinks[ws.SessionString] = append(usedLinks[ws.SessionString], apiResponse.Results[i].URL)
 			}
 		}(i)
+		usedLinks[ws.SessionString] = append(usedLinks[ws.SessionString], apiResponse.Results[i].URL)
 	}
 	wg.Wait()
-	result, err := SearchVectorDB.Call(
-		SearchVectorDB{
-			CallbacksHandler: nil,
-			SessionString:    ws.SessionString,
-			Settings:         ws.Settings,
-		},
-		context.Background(), input)
+	svb := SearchVectorDB{
+		CallbacksHandler: ws.CallbacksHandler,
+		SessionString:    ws.SessionString,
+		Settings:         ws.Settings,
+	}
+	result, err := svb.Call(context.Background(), input)
 	if err != nil {
-		return fmt.Sprintf("error from vector db search: %s", err.Error()), nil //nolint:nilerr
+		return fmt.Sprintf("error from vector db search: %s", err.Error()), nil
 	}
 
 	if ws.CallbacksHandler != nil {

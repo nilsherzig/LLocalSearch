@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import type { LogElement, ClientSettings as ClientValues } from '$lib/types/types';
+	import type { LogElement, ClientSettings as ClientValues, Source } from '$lib/types/types';
 	import { StepType } from '$lib/types/types';
 	import { onDestroy, onMount } from 'svelte';
 	import LogItem from '$lib/log_item.svelte';
 	import BottomBar from '$lib/bottom_bar.svelte';
-	import ToggleLogsButton from '$lib/toggle_logs_button.svelte';
 	import ToggleDarkmodeButton from '$lib/toggle_darkmode_button.svelte';
 	import SettingsWindow from '$lib/settings_window.svelte';
 	import ToggleModelSwitch from '$lib/toggle_model_switch.svelte';
+	import Sources from '$lib/sources.svelte';
+	import ShowLogsButton from '$lib/show_logs_button.svelte';
 
 	let eventSource: EventSource | null = null;
 	let sendMode = true;
@@ -19,12 +20,14 @@
 
 	let scrollContainer: HTMLElement;
 
+	let searchSources: Source[] = [];
+
 	const defaultClientValues: ClientValues = {
 		// default values, will be overwritten by local storage if available
 		maxIterations: 30,
 		contextSize: 8 * 1024,
-		temperature: 0.0,
-		modelName: 'adrienbrault/nous-hermes2pro:Q8_0',
+		temperature: 0,
+		modelName: 'llama3:8b-instruct-q6_K',
 		prompt: '',
 		toolNames: [],
 		webSearchCategories: [],
@@ -34,11 +37,9 @@
 		amountOfWebsites: 10,
 		chunkSize: 300,
 		chunkOverlap: 100,
-		systemMessage: ` 1. Format your answer in markdown.
-2. You have to use your tools to answer questions.
-3. You have to provide sources / links you've used to answer the question.
-4. You may use tools more than once.
-5. Answer in the same language as the question.`
+		systemMessage: `1. Format your "final answer" in markdown.
+2. You may use tools more than once.
+3. Answer in the same language as the question.`
 	};
 
 	let clientValues: ClientValues = defaultClientValues;
@@ -127,6 +128,7 @@
 		}
 		eventSource = null;
 		logs = [];
+		searchSources = [];
 		clientValues.session = 'default';
 		showExamplePrompts = true;
 	}
@@ -141,6 +143,7 @@
 	// Establish a connection to the server-sent events endpoint
 	function sendPrompt() {
 		showExamplePrompts = false;
+		searchSources = [];
 
 		let clientSettingsJsonString = JSON.stringify(clientValues);
 
@@ -172,24 +175,29 @@
 				sendMode = true;
 				return;
 			}
-			if (log.stepType == StepType.HandleOllamaStart) {
-				let currentLogIndex = logs.length;
-				setTimeout(() => {
-					for (let i = currentLogIndex; i < logs.length; i++) {
-						if (logs[i].stream) {
-							return;
-						}
-					}
-					let newLogElement: LogElement = {
-						message: `Ollama is currently loading the model. This might take a few seconds.`,
-						stepType: StepType.HandleOllamaModelLoadMessage
-					};
-					logs.push(newLogElement);
-					logs = logs;
-				}, 3000);
-			}
+			// if (log.stepType == StepType.HandleOllamaStart) {
+			// 	let currentLogIndex = logs.length;
+			// 	setTimeout(() => {
+			// 		for (let i = currentLogIndex; i < logs.length; i++) {
+			// 			if (logs[i].stream) {
+			// 				return;
+			// 			}
+			// 		}
+			// 		let newLogElement: LogElement = {
+			// 			message: `Ollama is currently loading the model. This might take a few seconds.`,
+			// 			stepType: StepType.HandleOllamaModelLoadMessage
+			// 		};
+			// 		logs.push(newLogElement);
+			// 		logs = logs;
+			// 	}, 8000);
+			// }
 
 			if (log.message) {
+				console.log(log);
+				if (log.stepType == StepType.HandleSourceAdded) {
+					searchSources.push(log.source);
+					searchSources = searchSources;
+				}
 				log.message = log.message.replaceAll('<|im_end|>', '').replaceAll('<|end_of_turn|>', '');
 				if (log.stream) {
 					if (lastElemWasStream) {
@@ -213,7 +221,6 @@
 			eventSource = null;
 			sendMode = true;
 		};
-		onMountHasRun = true;
 	}
 	onDestroy(() => {
 		eventSource?.close();
@@ -269,14 +276,17 @@
 					{/each}
 				</div>
 			{/if}
-			{#each logs as log}
-				<div in:fade>
-					<LogItem logElement={log} bind:showLogs></LogItem>
-				</div>
-			{/each}
+			<div>
+				{#each logs as log}
+					<div in:fade>
+						<LogItem logElement={log} bind:showLogs></LogItem>
+					</div>
+				{/each}
+			</div>
 		</div>
 	</div>
 </div>
+<Sources bind:searchSources></Sources>
 <div class="fixed top-0 w-full rounded transition-all">
 	<div
 		class="flex p-4 justify-between dark:bg-stone-950 bg-stone-200 lg:bg-transparent lg:dark:bg-transparent lg:bg-gradient-to-b lg:from-stone-200 lg:to-transparent lg:dark:from-stone-950 transition-all"
@@ -292,7 +302,7 @@
 		<!-- </div> -->
 		<div class="flex flex-row">
 			{#if logs.length > 0}
-				<ToggleLogsButton bind:showLogs></ToggleLogsButton>
+				<ShowLogsButton bind:showLogs></ShowLogsButton>
 			{/if}
 			<ToggleDarkmodeButton bind:isDarkMode></ToggleDarkmodeButton>
 		</div>

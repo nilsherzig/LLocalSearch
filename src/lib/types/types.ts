@@ -10,6 +10,11 @@ export type LogElement = {
     session: string;
 };
 
+export type ChatListItem = {
+    sessionid: string;
+    title: string;
+}
+
 export type ClientSettings = {
     contextSize: number;
     maxIterations: number;
@@ -46,14 +51,17 @@ export const enum StepType {
     HandleToolEnd = "HandleToolEnd",
     HandleToolError = "HandleToolError",
     HandleToolStart = "HandleToolStart",
-    HandleUserPrompt = "HandleUserPrompt",
     HandleVectorFound = "HandleVectorFound",
     HandleOllamaModelLoadMessage = "HandleOllamaModelLoadMessage",
+    HandleStreaming = "HandleStreaming",
+    HandleUserMessage = "HandleUserMessage"
 }
 
 export type Source = {
     name: string;
     link: string;
     summary: string;
+    title: string;
+    engine: string;
 };
 
