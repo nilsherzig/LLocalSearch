@@ -3,7 +3,7 @@ services:
   backend:
     image: nilsherzig/llocalsearch-backend:latest
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-host.docker.internal:11434}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - CHROMA_DB_URL=${CHROMA_DB_URL:-http://chromadb:8000}
       - SEARXNG_DOMAIN=${SEARXNG_DOMAIN:-http://searxng:8080}
       - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-nomic-embed-text:v1.5}
@@ -30,7 +30,7 @@ services:
     image: docker.io/library/redis:alpine
     command: redis-server --save 30 1 --loglevel warning
     networks:
-      - searxng
+      - llm_network
     volumes:
       - redis-data:/data
     cap_drop:
@@ -43,7 +43,6 @@ services:
   searxng:
     image: docker.io/searxng/searxng:latest
     networks:
-      - searxng
       - llm_network
     volumes:
       - ./searxng:/etc/searxng:rw
@@ -64,9 +63,6 @@ services:
 networks:
   llm_network:
     driver: bridge
-  searxng:
-    ipam:
-      driver: default
 
 volumes:
   redis-data:
