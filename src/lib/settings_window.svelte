@@ -11,8 +11,8 @@
 
 {#if showSettings}
 	<div
-		in:fade={{ duration: 300 }}
-		out:fade={{ duration: 300 }}
+		in:fade={{ duration: 100 }}
+		out:fade={{ duration: 100 }}
 		class="fixed backdrop-blur inset-0 z-10 flex flex-col items-center justify-center bg-opacity-20 dark:bg-opacity-80 bg-stone-950"
 	>
 		<div

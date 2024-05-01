@@ -125,7 +125,7 @@ func modelsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loadChatHistory(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(time.Millisecond * 1350)
+	time.Sleep(time.Millisecond * 350)
 	setCorsHeaders(w)
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)

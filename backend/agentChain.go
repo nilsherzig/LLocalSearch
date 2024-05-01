@@ -22,19 +22,6 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		}
 	}()
 
-	neededModels := []string{utils.EmbeddingsModel, clientSettings.ModelName}
-	for _, modelName := range neededModels {
-		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
-			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
-			outputChan <- utils.HttpJsonStreamElement{
-				Message:  fmt.Sprintf("Model %s does not exist and could not be pulled: %s", modelName, err.Error()),
-				StepType: utils.StepHandleLlmError,
-				Stream:   false,
-			}
-			return err
-		}
-	}
-
 	if clientSettings.Session == "new" {
 		clientSettings.Session = utils.GetSessionString()
 		slog.Info("Created new session", "session", clientSettings.Session)
@@ -79,15 +66,18 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		Message:  clientSettings.Prompt,
 	}
 
-	// sourcesChan := make(chan string, 100)
-	// defer close(sourcesChan)
-	// go func() {
-	// 	slog.Info("Listening for sources")
-	// 	for {
-	// 		source := <-sourcesChan
-	// 		slog.Info("Source added", "source", source)
-	// 	}
-	// }()
+	neededModels := []string{utils.EmbeddingsModel, clientSettings.ModelName}
+	for _, modelName := range neededModels {
+		if err := utils.CheckIfModelExistsOrPull(modelName); err != nil {
+			slog.Error("Model does not exist and could not be pulled", "model", modelName, "error", err)
+			outputChan <- utils.HttpJsonStreamElement{
+				Message:  fmt.Sprintf("Model %s does not exist and could not be pulled: %s", modelName, err.Error()),
+				StepType: utils.StepHandleLlmError,
+				Stream:   false,
+			}
+			return err
+		}
+	}
 
 	llm, err := utils.NewOllama(clientSettings.ModelName, clientSettings.ContextSize)
 	if err != nil {

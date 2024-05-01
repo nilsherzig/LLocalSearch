@@ -47,7 +47,7 @@
 				</div>
 				<!-- user prompt  -->
 			{:else if logElement.stepType == StepType.HandleUserMessage}
-				<div class="border-2 border-t-stone-300 dark:border-stone-800 mt-10 rounded"></div>
+				<div class="border-2 border-t-stone-200 dark:border-stone-800 mt-10 rounded"></div>
 				<div
 					class="my-2 p-2 text-stone-700 dark:text-stone-200 dark:border-stone-400 font-bold text-lg"
 				>

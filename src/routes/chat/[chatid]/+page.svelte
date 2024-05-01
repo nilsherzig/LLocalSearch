@@ -14,6 +14,11 @@
 	import NewChatButton from '$lib/new_chat_button.svelte';
 	import ShowLogsButton from '$lib/show_logs_button.svelte';
 	import ToggleDarkmodeButton from '$lib/toggle_darkmode_button.svelte';
+	import SettingsWindow from '$lib/settings_window.svelte';
+	import SidebarSourcesToggle from '$lib/sidebar_sources_toggle.svelte';
+	import SidebarHistoryToggle from '$lib/sidebar_history_toggle.svelte';
+	import Sidebar from '$lib/sidebar.svelte';
+	import ToggleSettingsButton from '$lib/toggle_settings_button.svelte';
 
 	export let showLogs = false;
 	export let data: PageData;
@@ -67,9 +72,11 @@
 	function setSessionToChatId(chatid: string) {
 		clientValues.session = chatid;
 		console.log('changed session to', chatid);
+		currentLogs = [];
 	}
 
 	setSessionToChatId($page.params.chatid);
+	$: setSessionToChatId(clientValues.session);
 
 	// Establish a connection to the server-sent events endpoint
 	function sendPrompt() {
@@ -149,13 +156,15 @@
 		eventSource?.close();
 	});
 
-	let showSidebar = true;
+	let showRightBar = true;
+	let rightBarMode = 'chats';
+
 	onMount(() => {
 		// if screen width is more than 640px, show sidebar
 		if (window.innerWidth > 640) {
-			showSidebar = true;
+			showRightBar = true;
 		} else {
-			showSidebar = false;
+			showRightBar = false;
 		}
 	});
 
@@ -183,9 +192,17 @@
 	}
 	onMount(() => {
 		scollToElement();
+		fetch('/api/models')
+			.then((response) => response.json())
+			.then((data) => {
+				models = data;
+			});
 	});
 
 	$: currentLogs, scollToElement();
+
+	let models: string[];
+	let showSettings = false;
 </script>
 
 <svelte:head>
@@ -198,44 +215,37 @@
 	<title>Chat</title>
 </svelte:head>
 
+<SettingsWindow
+	bind:clientSettings={clientValues}
+	{models}
+	{defaultClientValues}
+	bind:showSettings
+/>
 <div class="flex flex-col h-svh w-svw text-stone-800">
-	<div class="w-full bg-stone-200 flex px-2 pt-2 justify-between border border-stone-300">
-		<div class="flex gap-2">
-			<ToggleSidebarButton bind:showSidebar />
+	<div class="w-full bg-stone-200 flex px-2 pt-2 justify-between border-b border-stone-300">
+		<div class="flex gap-4">
+			<ToggleSidebarButton bind:showSidebar={showRightBar} />
 			<NewChatButton action={newChat} />
+			{#if showRightBar}
+				<div class="flex gap-2" in:slide={{ duration: 200, axis: 'x' }}>
+					<SidebarSourcesToggle bind:rightBarMode />
+					<SidebarHistoryToggle bind:rightBarMode />
+				</div>
+			{/if}
 			<!-- {#if showSidebar} -->
 			<!-- 	<NewChatButton action={newChat} /> -->
 			<!-- {/if} -->
 		</div>
-		<div class="flex gap-2">
+		<div class="flex gap-4">
 			<ShowLogsButton bind:showLogs />
 			<ToggleDarkmodeButton bind:isDarkMode />
+			<ToggleSettingsButton bind:showSettings />
 		</div>
 	</div>
 	<div class="flex flex-grow">
-		<div>
-			{#if showSidebar}
-				<div
-					in:slide={{ duration: 200, axis: 'x' }}
-					out:slide={{ duration: 200, axis: 'x' }}
-					class="w-56 bg-stone-300 shadow-inner p-2 overflow-scroll h-full border-stone-300 border-r"
-				>
-					{#await data.item?.fetchChats}
-						<!-- <div> -->
-						<!-- 	<ChatList loading={true} /> -->
-						<!-- </div> -->
-					{:then chatListItems}
-						<div in:fade={{ duration: 100 }}>
-							{#if chatListItems}
-								<ChatList {chatListItems} bind:session={clientValues.session} />
-							{/if}
-						</div>
-					{:catch error}
-						<p style="color: red">{error.message}</p>
-					{/await}
-				</div>
-			{/if}
-		</div>
+		{#if showRightBar}
+			<Sidebar bind:rightBarMode bind:searchSources bind:session={clientValues.session} />
+		{/if}
 		<div class="flex flex-col h-full flex-grow overflow-hidden">
 			<div class="flex-grow flex justify-center h-96 overflow-scroll p-4">
 				{#await data.item?.fetchHistory}
