@@ -144,85 +144,23 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	}
 	slog.Info("GotFirstAnswer", "session", session, "userQuery", clientSettings, "answer", originalAnswer, "time", time.Since(startTime))
 
-	// answerFormat := []outputparser.ResponseSchema{
-	// 	{
-	// 		Name:        "quote",
-	// 		Description: "The quote from the last answer",
-	// 	},
-	// 	{
-	// 		Name:        "link",
-	// 		Description: "The link to the source of the quote",
-	// 	},
-	// }
-	//
-	// parser := outputparser.NewStructured(answerFormat)
-	// slog.Info("new parser", "format", parser.GetFormatInstructions())
-	//
-	// ans, err = chains.Run(ctx, mainExecutor, "Please provide citations for your last answer. Do not use tools. Include the codeblock quotes. "+parser.GetFormatInstructions(), chains.WithTemperature(temp))
-	// if err != nil {
-	// 	return err
-	// }
+	messages, err := mem.ChatHistory.Messages(ctx)
+	if err != nil {
+		return err
+	}
 
-	//   template1 := `
-	// You are a playwright. Given the title of play, it is your job to write a synopsis for that title.
-	// Title: {{.title}}
-	// Playwright: This is a synopsis for the above play:
-	// `
-	//
-	//   llmFormatChain := chains.LLMChain{
-	//   	Prompt:           prompts.NewPromptTemplate(template1, []string{"title"}),
-	//   	LLM:              llm,
-	//   	Memory:           mem,
-	//   	CallbacksHandler: nil,
-	//   	OutputParser:     parser,
-	//   	OutputKey:        "",
-	//   }
-	//   ans, err = llmFormatChain.
-	//   if err != nil {
-	//   	return err
-	//   }
+	ans, err := llm.Call(ctx, fmt.Sprintf("Please three word long title for the following conversation. Dont write anything else. Respond in the following Fromat `title: [your 3 word title]`. Conversation: ```%v```", messages))
+	if err != nil {
+		return err
+	}
 
-	// slog.Info("Ended source chain", "session", session, "userQuery", clientSettings, "answer", ans)
-	// parsed, err := parser.Parse(ans)
-	// if err != nil {
-	// 	slog.Error("Error parsing answer", "error", err)
-	// 	return err
-	// }
-	// slog.Info("parsed sources", "parsed", parsed)
+	slog.Info("GotTitleAnswer", "session", session, "answer", ans, "time", time.Since(startTime))
+	oldSession := sessions[session]
+	oldSession.Title = ans
+	sessions[session] = oldSession
 
-	// _, err = llm.Call(ctx, "Please rewrite your last answer VERBATIM but replace parts of the text with markdown links to the relevant source. Do not use tools.", llms.WithTemperature(temp),
-	// 	llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-	// 		outputChan <- utils.HttpJsonStreamElement{
-	// 			Message:  string(chunk),
-	// 			StepType: utils.StepHandleFormat,
-	// 			Stream:   true,
-	// 		}
-	// 		return nil
-	// 	}))
-
-	// ansF, err := lschains.RunSourceChain(llm, llm_tools.UsedSources[session], originalAnswer)
-	// if err != nil {
-	// 	return err
-	// }
-	// sourcesJson, err := json.Marshal(llm_tools.UsedSources[session])
-	// if err != nil {
-	// 	slog.Error("Error getting sources", "error", err)
-	// }
-	// formatPrompt := fmt.Sprintf("Please repeat this the following old answer word for word. But replace parts of the old answer with markdown links to the relevant source. Old Answer: ```%s``` Sources: ```%s```.", originalAnswer, sourcesJson)
-	// _, err = llm.Call(ctx, formatPrompt, llms.WithTemperature(temp),
-	// 	llms.WithTemperature(0),
-	// 	llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-	// 		outputChan <- utils.HttpJsonStreamElement{
-	// 			Message:  string(chunk),
-	// 			StepType: utils.StepHandleFinalAnswer,
-	// 			Stream:   true,
-	// 		}
-	// 		return nil
-	// 	}))
-	//
 	outputChan <- utils.HttpJsonStreamElement{
 		Close: true,
 	}
-	slog.Info("SourcesAddedToAnswer", "session", session, "userQuery", clientSettings, "time", time.Since(startTime))
 	return nil
 }

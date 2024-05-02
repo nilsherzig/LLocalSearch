@@ -1,28 +1,22 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import type { ChatListItem } from './types/types';
 	export let item: ChatListItem;
 	export let session: string;
-
-	function changeChat(chatid: string) {
-		console.log('Changing chat to: ' + chatid);
-		goto('/chat/' + chatid);
-		session = chatid;
-	}
+	export let loadHistory: Function;
 </script>
 
-<button on:click={() => changeChat(item.sessionid)}>
+<button on:click={() => loadHistory(item.sessionid)}>
 	{#if item.sessionid === session}
 		<div
-			class="p-0.5 hover:cursor-pointer h-8 overflow-hidden shadow rounded bg-stone-1000 border-2 border-stone-400 transition-all"
+			class="text-left p-1 px-2 shadow-inner hover:cursor-pointer truncate rounded bg-stone-200 dark:bg-stone-700 transition-all text-sm dark:text-stone-300"
 		>
-			<span>{item.title}</span>
+			<span>{item.title.replace('title: ', '')}</span>
 		</div>
 	{:else}
 		<div
-			class="p-0.5 hover:cursor-pointer h-8 overflow-hidden shadow rounded bg-stone-50 border-2 border-stone-300 hover:bg-stone-100 hover:border-stone-400 transition-all"
+			class="text-left p-1 px-2 hover:cursor-pointer hover:shadow-inner truncate rounded bg-stone-100 hover:bg-stone-200 dark:bg-stone-900 hover:dark:bg-stone-700 dark:text-stone-300 transition-all text-sm"
 		>
-			<span>{item.title}</span>
+			<span>{item.title.replace('title: ', '')}</span>
 		</div>
 	{/if}
 </button>

@@ -47,9 +47,9 @@
 				</div>
 				<!-- user prompt  -->
 			{:else if logElement.stepType == StepType.HandleUserMessage}
-				<div class="border-2 border-t-stone-200 dark:border-stone-800 mt-10 rounded"></div>
+				<div class="border border-t-stone-200 dark:border-stone-800 mt-10 rounded"></div>
 				<div
-					class="my-2 p-2 text-stone-700 dark:text-stone-200 dark:border-stone-400 font-bold text-lg"
+					class="my-2 p-2 text-stone-700 dark:text-stone-200 dark:border-stone-400 font-semibold text-lg"
 				>
 					{logElement.message}
 				</div>
@@ -61,7 +61,7 @@
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
 							viewBox="0 0 24 24"
-							stroke-width="1.5"
+							stroke-width="1.2"
 							stroke="currentColor"
 							class="w-6 h-6"
 						>
@@ -85,7 +85,7 @@
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
 							viewBox="0 0 24 24"
-							stroke-width="1.5"
+							stroke-width="1.2"
 							stroke="currentColor"
 							class="w-6 h-6"
 						>
@@ -104,7 +104,7 @@
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
 							viewBox="0 0 24 24"
-							stroke-width="1.5"
+							stroke-width="1.2"
 							stroke="currentColor"
 							class="w-6 h-6"
 						>
@@ -119,7 +119,7 @@
 					</div>
 				{:else}
 					<div
-						class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border-2 dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700"
+						class="rounded my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700"
 					>
 						<article class="p-2 prose prose-stone dark:prose-invert">
 							{@html marked.parse(

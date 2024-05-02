@@ -15,7 +15,7 @@
 	{#if sendMode && prompt != ''}
 		<span title="send message">
 			<button
-				class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300 hover:shadow-inner"
+				class="bg-stone-100 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-200 hover:shadow-inner border border-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
 				on:click={() => {
 					sendPrompt();
 				}}
@@ -24,7 +24,7 @@
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
 					viewBox="0 0 24 24"
-					stroke-width="1.5"
+					stroke-width="1.2"
 					stroke="currentColor"
 					class="w-6 h-6"
 				>
@@ -40,7 +40,7 @@
 	{:else if !sendMode && eventSource}
 		<span title="stop chat">
 			<button
-				class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
+				class="bg-stone-100 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-200 hover:shadow-inner border border-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
 				on:click={() => {
 					stopChat();
 					sendMode = true;
@@ -50,7 +50,7 @@
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
 					viewBox="0 0 24 24"
-					stroke-width="1.5"
+					stroke-width="1.2"
 					stroke="currentColor"
 					class="w-6 h-6"
 				>
@@ -64,9 +64,9 @@
 			</button>
 		</span>
 	{:else}
-		<span title="reset chat">
+		<span title="new chat">
 			<button
-				class="bg-stone-200 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
+				class="bg-stone-100 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-200 hover:shadow-inner border border-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300 dark:border-stone-500"
 				on:click={() => {
 					newChat();
 					console.log('new chat');
@@ -76,7 +76,7 @@
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
 					viewBox="0 0 24 24"
-					stroke-width="1.5"
+					stroke-width="1.2"
 					stroke="currentColor"
 					class="w-6 h-6"
 				>

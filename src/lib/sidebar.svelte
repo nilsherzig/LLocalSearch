@@ -2,33 +2,18 @@
 	import { fade, slide } from 'svelte/transition';
 	import type { ChatListItem, Source } from './types/types';
 	import ChatList from './chatList.svelte';
-	import { onMount } from 'svelte';
 	export let rightBarMode: string;
 	export let searchSources: Source[];
 	export let session: string;
+	export let loadHistory: Function;
 
-	let chatlistItems = fetchChats();
-
-	async function fetchChats(): Promise<ChatListItem[]> {
-		const res = await fetch(`/api/chats/`);
-		const data = await res.json();
-		if (data['error']) {
-			if (typeof window !== 'undefined') {
-				throw new Error(data['error']);
-			}
-		}
-		return data;
-	}
-
-	onMount(async () => {
-		fetchChats();
-	});
+	export let chatlistItems: Promise<ChatListItem[]>;
 </script>
 
 <div
 	in:slide={{ duration: 200, axis: 'x' }}
 	out:slide={{ duration: 200, axis: 'x' }}
-	class="w-fit bg-stone-300 shadow-inner p-2 overflow-scroll h-full border-stone-300 border-r transition-all"
+	class="w-fit bg-stone-100 shadow-inner p-2 overflow-scroll h-full border-stone-300 border-r transition-all dark:bg-stone-900 dark:border-stone-800"
 >
 	{#if rightBarMode == 'chats'}
 		<div class="w-64">
@@ -39,7 +24,7 @@
 			{:then chatListItems}
 				<div in:fade={{ duration: 100 }}>
 					{#if chatListItems}
-						<ChatList {chatListItems} bind:session />
+						<ChatList {chatListItems} bind:session {loadHistory} />
 					{/if}
 				</div>
 			{:catch error}
