@@ -9,7 +9,7 @@
 	);
 </script>
 
-<div class="animate-pulse max-w-prose opacity-30" in:fade={{ duration: 200 }}>
+<div class="animate-pulse opacity-30" in:fade={{ duration: 200 }}>
 	<div class="border border-t-neutral-300 dark:border-neutral-800 mt-10 rounded"></div>
 	<div class="flex gap-1">
 		{#each titleNumbers as i}

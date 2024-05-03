@@ -14,13 +14,13 @@
 	<span title={cleanTitle}>
 		{#if item.sessionid === session}
 			<div
-				class="text-left p-1 px-2 shadow-inner hover:cursor-pointer truncate rounded bg-neutral-200 dark:bg-neutral-700 transition-all text-sm dark:text-neutral-300"
+				class="text-left p-1 px-2 shadow-inner hover:cursor-pointer truncate rounded bg-neutral-200 dark:bg-neutral-800 transition-all text-sm dark:text-neutral-300"
 			>
 				<span>{cleanTitle}</span>
 			</div>
 		{:else}
 			<div
-				class="text-left p-1 px-2 hover:cursor-pointer hover:shadow-inner truncate rounded bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 hover:dark:bg-neutral-700 dark:text-neutral-300 transition-all text-sm"
+				class="text-left p-1 px-2 hover:cursor-pointer hover:shadow-inner truncate rounded bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 hover:dark:bg-neutral-800 dark:text-neutral-300 transition-all text-sm"
 			>
 				<span>{cleanTitle}</span>
 			</div>

@@ -46,17 +46,7 @@ func SetupTutorialChatHistory() {
 	newFakeSession.Buffer.ChatHistory.AddUserMessage(context.Background(), userQuestion)
 
 	tutorialMessageOne := `## Welcome to the LLocalSearch tutorial.
-### How it works
-
-asdasd
-
-### What you can do
-
-### How to get started
-
-### Customizing your experience
-
-### Contributing / Reporting issues
+    Todo 
 `
 	newFakeSession.Buffer.ChatHistory.AddAIMessage(context.Background(), tutorialMessageOne)
 

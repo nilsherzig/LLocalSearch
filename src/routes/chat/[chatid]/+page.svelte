@@ -24,6 +24,8 @@
 	import Sidebar from '$lib/sidebar.svelte';
 	import ToggleSettingsButton from '$lib/toggle_settings_button.svelte';
 	import { pushState, replaceState } from '$app/navigation';
+	let innerWidth = 0;
+	let innerHeight = 0;
 
 	// let chatHistory: Promise<LogElement[]>;
 	let chatLoadID = $page.params.chatid;
@@ -54,6 +56,9 @@
 		window.history.replaceState(history.state, '', `/chat/${id}`);
 		if (title) {
 			pageTitle = title;
+		}
+		if (userHasSmallWindow) {
+			showSidebar = false;
 		}
 		// $page.state.chatid = id;
 		// pushState(`/chat/${id}`, $page.state.chatid);
@@ -178,15 +183,18 @@
 
 	let showSidebar = true;
 	let rightBarMode = 'chats';
+	let userHasSmallWindow = false;
 
 	onMount(() => {
-		// if screen width is more than 640px, show sidebar
+		// if screen width is more than 640px, show sidebar by default
 		if (window.innerWidth > 640) {
 			showSidebar = true;
 		} else {
 			showSidebar = false;
 		}
 	});
+	$: innerWidth > 640 ? (userHasSmallWindow = false) : (userHasSmallWindow = true);
+	$: showSidebar = !userHasSmallWindow;
 
 	// handle the whole darkmode thing
 	let isDarkMode = false;
@@ -238,6 +246,7 @@
 	/>
 	<title>{pageTitle}</title>
 </svelte:head>
+<svelte:window bind:innerWidth bind:innerHeight />
 
 <SettingsWindow
 	bind:clientSettings={clientValues}
@@ -250,10 +259,13 @@
 		class="w-full bg-neutral-100 flex px-2 pt-2 justify-between border-b border-neutral-300 dark:bg-neutral-900 dark:border-neutral-700"
 	>
 		<div class="flex gap-2">
-			<ToggleSidebarButton bind:showSidebar />
-			<NewChatButton action={newChat} />
+			{#if userHasSmallWindow}
+				<div class="mr-4">
+					<ToggleSidebarButton bind:showSidebar />
+				</div>
+			{/if}
 			{#if showSidebar}
-				<div class="flex gap-2 ml-4" in:slide={{ duration: 200, axis: 'x' }}>
+				<div class="flex gap-2" in:slide={{ duration: 200, axis: 'x' }}>
 					<SidebarSourcesToggle bind:rightBarMode />
 					<SidebarHistoryToggle bind:rightBarMode />
 				</div>
@@ -267,24 +279,26 @@
 	</div>
 	<div class="flex flex-grow">
 		{#if showSidebar}
-			<Sidebar
-				bind:rightBarMode
-				bind:searchSources
-				bind:chatlistItems
-				bind:session={clientValues.session}
-				{loadHistory}
-			/>
+			<div class="w-fit h-full">
+				<Sidebar
+					bind:rightBarMode
+					bind:searchSources
+					bind:chatlistItems
+					bind:session={clientValues.session}
+					{loadHistory}
+				/>
+			</div>
 		{/if}
 		<div class="flex flex-col h-full flex-grow overflow-hidden">
-			<div class="flex-grow flex justify-center h-96 overflow-scroll p-4">
+			<div class="flex-grow flex justify-center h-96 overflow-y-scroll overflow-x-hidden p-4">
 				{#await fetchHistory(chatLoadID)}
-					<div class="flex flex-col gap-2">
+					<div class="flex flex-col gap-2 max-w-prose w-full">
 						<LoadingMessage />
 						<LoadingMessage />
 						<LoadingMessage />
 					</div>
 				{:then chatHistoryItems}
-					<div>
+					<div class="w-full max-w-prose">
 						{#if chatHistoryItems}
 							{#each chatHistoryItems as logElement}
 								<LogItem bind:showLogs bind:logElement />
@@ -300,7 +314,7 @@
 					<p class="text-red-600">{error.message}</p>
 				{/await}
 			</div>
-			<div class="sticky justify-center pt-2">
+			<div class="justify-center pt-2">
 				<BottomBar
 					bind:sendMode
 					bind:eventSource

@@ -41,7 +41,7 @@
 	<p>
 		{descriptionBefore}
 		<input
-			class="rounded w-20 dark:bg-stone-800 px-1 py-0.5 outline-none bg-stone-200
+			class="rounded w-20 dark:bg-neutral-800 px-1 py-0.5 outline-none bg-neutral-200
         [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
         "
 			type="number"

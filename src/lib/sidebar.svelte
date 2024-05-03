@@ -14,7 +14,7 @@
 <div
 	in:slide={{ duration: 200, axis: 'x' }}
 	out:slide={{ duration: 200, axis: 'x' }}
-	class="w-fit bg-neutral-100 shadow-inner p-2 overflow-scroll h-full border-neutral-300 border-r transition-all dark:bg-neutral-900 dark:border-neutral-800"
+	class="bg-neutral-100 shadow-inner p-2 overflow-scroll h-full border-neutral-300 border-r transition-all dark:bg-neutral-900 dark:border-neutral-800"
 >
 	{#if rightBarMode == 'chats'}
 		<div class="w-64">

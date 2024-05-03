@@ -23,7 +23,7 @@
     "
 >
 	<div class="break-words mx-4 overflow-wrap">
-		<div class="max-w-prose flex flex-col">
+		<div class="w-full flex flex-col">
 			<!-- error -->
 			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError || logElement.stepType == StepType.HandleParseError}
 				<div
@@ -121,7 +121,7 @@
 					<div
 						class="rounded my-2 p-2 bg-neutral-100 text-neutral-600 border-neutral-300 border dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700"
 					>
-						<article class="p-2 prose prose-neutral dark:prose-invert">
+						<article class="p-2 prose prose-neutral dark:prose-invert w-full">
 							{@html marked.parse(
 								logElement.message
 									.replace('Thought: Do I need to use a tool? No\n', '')

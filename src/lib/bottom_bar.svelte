@@ -29,10 +29,16 @@
 				if (!event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
 					event.preventDefault(); // Prevents the default action of the enter key (e.g., submitting a form)
 					sendPrompt();
+					textArea.blur();
 				}
 			}
 		}
 		autoResize(); // Initial resize to adjust for any default text
+	}
+	$: if (sendMode) {
+		if (textArea) {
+			textArea.focus();
+		}
 	}
 </script>
 
