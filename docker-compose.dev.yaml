@@ -26,7 +26,7 @@ services:
     volumes:
       - ./:/app/
     ports:
-      - '5173:5173'
+      - '3000:5173'
     networks:
       - llm_network_dev
 
