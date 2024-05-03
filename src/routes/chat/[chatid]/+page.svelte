@@ -27,7 +27,8 @@
 
 	// let chatHistory: Promise<LogElement[]>;
 	let chatLoadID = $page.params.chatid;
-	function loadHistory(id: string) {
+	let pageTitle = 'LLocalSearch';
+	function loadHistory(id: string, title: string) {
 		console.log('loading history', id);
 		if (id === '') {
 			console.log('id is empty');
@@ -51,12 +52,15 @@
 		// });
 		chatLoadID = id;
 		window.history.replaceState(history.state, '', `/chat/${id}`);
+		if (title) {
+			pageTitle = title;
+		}
 		// $page.state.chatid = id;
 		// pushState(`/chat/${id}`, $page.state.chatid);
 	}
 	onMount(() => {
 		if ($page.params.chatid) {
-			loadHistory($page.params.chatid);
+			loadHistory($page.params.chatid, 'LLocalSearch');
 		}
 	});
 	// $: loadHistory($page.params.chatid);
@@ -96,7 +100,7 @@
 	let clientValues: ClientSettings = defaultClientValues;
 
 	function newChat() {
-		loadHistory('new');
+		loadHistory('new', 'new chat');
 	}
 
 	function stopChat() {
@@ -135,7 +139,8 @@
 				sendMode = true;
 				chatlistItems = fetchChats(); // update chat list, since title has changed
 				if (switchSession) {
-					loadHistory(switchSession);
+					let cleanTitle = log.message.replace(/.*title: /, '');
+					loadHistory(switchSession, cleanTitle);
 				}
 				return;
 			}
@@ -231,7 +236,7 @@
 		href="https://fonts.googleapis.com/css2?family=Vollkorn:ital,wght@0,400..900;1,400..900&display=swap"
 		rel="stylesheet"
 	/>
-	<!-- <title>Chat</title> -->
+	<title>{pageTitle}</title>
 </svelte:head>
 
 <SettingsWindow

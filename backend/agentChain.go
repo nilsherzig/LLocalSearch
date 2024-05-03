@@ -160,7 +160,8 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 	sessions[session] = oldSession
 
 	outputChan <- utils.HttpJsonStreamElement{
-		Close: true,
+		Close:   true,
+		Message: sessions[session].Title,
 	}
 	return nil
 }
