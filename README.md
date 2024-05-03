@@ -2,7 +2,8 @@
 
 ## What it is and what it does
 
-[demo.webm](https://github.com/nilsherzig/LLocalSearch/assets/72463901/d7884490-0134-4e7f-80dd-7b395f61976b)
+[demo.webm](https://github.com/nilsherzig/LLocalSearch/assets/72463901/e13e2531-05a8-40af-8551-965ed9d24eb4)
+
 
 LLocalSearch is a wrapper around locally running `Large Language Models` (like ChatGTP, but a lot smaller and less "smart") which allows them to choose from a set of tools. These tools allow them to search the internet for current information about your question. This process is iterative, which means, that the running LLM can freely choose to use tools (even multiple times) based on the information its getting from you and other tool calls. 
 
