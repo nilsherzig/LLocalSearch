@@ -3,6 +3,7 @@ services:
   backend:
     volumes:
       - ./backend/:/app/
+      - /home/nils/Notes/:/localfiles/:ro
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
@@ -25,7 +26,7 @@ services:
     volumes:
       - ./:/app/
     ports:
-      - '3000:5173'
+      - '5173:5173'
     networks:
       - llm_network_dev
 

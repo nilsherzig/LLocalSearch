@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
@@ -15,6 +16,8 @@ import (
 	"github.com/tmc/langchaingo/textsplitter"
 	"github.com/tmc/langchaingo/vectorstores/chroma"
 )
+
+var spaceRegex = regexp.MustCompile(`\s+`)
 
 func saveToVectorDb(timeoutCtx context.Context, docs []schema.Document, sessionString string) error {
 	llm, err := NewOllamaEmbeddingLLM()
@@ -49,11 +52,33 @@ func saveToVectorDb(timeoutCtx context.Context, docs []schema.Document, sessionS
 	_, errAd := store.AddDocuments(timeoutCtx, docs)
 
 	if errAd != nil {
-		slog.Warn("Error adding document: %v\n", errAd)
+		slog.Warn("Error adding document", "error", errAd)
 		return fmt.Errorf("Error adding document: %v\n", errAd)
 	}
 
 	// log.Printf("Added %d documents\n", len(res))
+	return nil
+}
+
+func LoadMarkdownToVectorDB(ctx context.Context, markdown string, sessionString string, chunkSize int, chunkOverlap int, path string) error {
+	vectorLoader := documentloaders.NewText(strings.NewReader(markdown))
+	splitter := textsplitter.NewTokenSplitter(
+		textsplitter.WithSeparators([]string{"\n\n", "\n"}),
+	)
+	splitter.ChunkSize = chunkSize
+	splitter.ChunkOverlap = chunkOverlap
+	docs, err := vectorLoader.LoadAndSplit(ctx, splitter)
+
+	for i := range docs {
+		docs[i].Metadata = map[string]interface{}{
+			"URL": path,
+		}
+	}
+
+	err = saveToVectorDb(context.Background(), docs, sessionString)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -80,7 +105,7 @@ func DownloadWebsiteToVectorDB(ctx context.Context, url string, sessionString st
 
 	for i := range docs {
 		docs[i].Metadata = map[string]interface{}{
-			"url": url,
+			"URL": url,
 		}
 	}
 
@@ -97,9 +122,9 @@ func DownloadWebsiteToVectorDB(ctx context.Context, url string, sessionString st
 func stripHtml(html string) string {
 	policy := bluemonday.StrictPolicy()
 	result := policy.Sanitize(html)
-	// result = strings.ReplaceAll(result, "\n", "")
-	result = strings.ReplaceAll(result, "\t", "")
 	result = strings.ReplaceAll(result, "&#34;", "")
 	result = strings.ReplaceAll(result, "&#39;", "")
+	result = spaceRegex.ReplaceAllString(result, " ")
+	result = strings.ReplaceAll(result, "\t", "")
 	return result
 }

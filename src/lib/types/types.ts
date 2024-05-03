@@ -8,7 +8,13 @@ export type LogElement = {
     stepType: StepType;
     stream: boolean;
     session: string;
+    timeStamp: number;
 };
+
+export type ChatListItem = {
+    sessionid: string;
+    title: string;
+}
 
 export type ClientSettings = {
     contextSize: number;
@@ -46,14 +52,17 @@ export const enum StepType {
     HandleToolEnd = "HandleToolEnd",
     HandleToolError = "HandleToolError",
     HandleToolStart = "HandleToolStart",
-    HandleUserPrompt = "HandleUserPrompt",
     HandleVectorFound = "HandleVectorFound",
     HandleOllamaModelLoadMessage = "HandleOllamaModelLoadMessage",
+    HandleStreaming = "HandleStreaming",
+    HandleUserMessage = "HandleUserMessage"
 }
 
 export type Source = {
     name: string;
     link: string;
     summary: string;
+    title: string;
+    engine: string;
 };
 

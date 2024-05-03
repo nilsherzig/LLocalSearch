@@ -1,73 +1,95 @@
 # LLocalSearch
 
-> [!IMPORTANT]
-> Discuss configurations and setups with other users at: https://discord.gg/Cm77Eav5mX. Help / Support is handled exclusively on GitHub to allow people with similar issues to find solutions more easily. 
+## What it is and what it does
 
-## What it is
+[Demo.webm](https://github.com/nilsherzig/LLocalSearch/assets/72463901/f3daf223-af22-4645-8959-739c4122698d)
 
-LLocalSearch is a completely locally running search aggregator using LLM Agents. The user can ask a question and the system will use a chain of LLMs to find the answer. The user can see the progress of the agents and the final answer. No OpenAI or Google API keys are needed.
+LLocalSearch is a wrapper around locally running `Large Language Models` (like ChatGTP, but a lot smaller and less "smart") which allows them to choose from a set of tools. These tools allow them to search the internet for current information about your question. This process is iterative, which means, that the running LLM can freely choose to use tools (even multiple times) based on the information its getting from you and other tool calls. 
 
-### Demo 
 
-[Screencast from 2024-04-21 22-16-23.webm](https://github.com/nilsherzig/LLocalSearch/assets/72463901/f3daf223-af22-4645-8959-739c4122698d)
+Here is a rough representation of how this looks like.
 
-## Features 
+```mermaid
+flowchart TB
+	You
+	LLM
+	WebSearch
+	WebScrape
+	Database
+	FinalAnswer
+	
+	You -- asking a question --> LLM
+	LLM --> WebSearch
+	LLM --> WebScrape
+	LLM --> Database
+	LLM -- answer --> FinalAnswer
 
--  🕵️ Completely local (no need for API keys)
-- 💸 Runs on "low end" LLM Hardware (demo video uses a 7b model)
-- 🤓 Progress logs, allowing for a better understanding of the search process
-- 🤔 Follow-up questions
-- 📱 Mobile friendly interface
-- 🚀 Fast and easy to deploy with Docker Compose
-- 🌐 Web interface, allowing for easy access from any device
-- 💮 Handcrafted UI with light and dark mode
+	WebSearch --> LLM
+	WebScrape --> LLM
+	Database --> LLM
 
-## Status 
-
-This project is still in its very early days. Expect some bugs. 
-
-## How it works 
-
-Please read [infra](https://github.com/nilsherzig/LLocalSearch/issues/17) to get the most up-to-date idea.
-
-## Install
-
-### Requirements
-
-- A running [Ollama](https://ollama.com/) server, reachable from the container
-    - GPU is not needed, but recommended
-- Docker Compose
-
-> [!WARNING]
-> Please read [Ollama Setup Guide](./OLLAMA_GUIDE.md) to get Ollama working with LLocalSearch.
-
-### Run the latest release
-
-Recommended, if you don't intend to develop on this project.
-
-```bash
-git clone https://github.com/nilsherzig/LLocalSearch.git
-cd ./LLocalSearch
-# 🔴 check the env vars inside the compose file (and `env-example` file) and change them if needed
-docker-compose up 
+	FinalAnswer -- send to --> You
 ```
 
-🎉 You should now be able to open the web interface on http://localhost:3000. Nothing else is exposed by default.
+### Features
 
-### Run the development version
+- 🕵‍♀ Completely local (no need for API keys) and thus a lot more privacy respecting
+- 💸 Runs on "low end" hardware (the demo video uses a 300€ GPU)
+- 🤓 Live logs and links in the answer allow you do get a better understanding about what the agent is doing and what information the answer is based on. Allowing for a great starting point to dive deeper into your research.
+- 🤔 Supports follow up questions
+- 📱 Mobile friendly design
+- 🌓 Dark and light mode
 
-Only recommended if you want to contribute to this project.
+## Road-map
+
+### I'm currently working on 👷
+
+#### Support for LLama3 🦙
+
+The langchain library im using does not respect the LLama3 stop words, which results in LLama3 starting to hallucinate at the end of a turn. I have a working patch (checkout the experiments branch), but since im unsure if my way is the right way to solve this, im still waiting for a response from the  [langchaingo](https://github.com/tmc/langchaingo) team.
+
+#### Interface overhaul 🌟
+
+An Interface overhaul, allowing for more flexible panels and more efficient use of space. 
+Inspired by the current layout of [Obsidian](https://obsidian.md)
+
+#### Support for chat histories / recent conversations 🕵‍♀
+
+Still needs a lot of work, like refactoring a lot of the internal data structures to allow for more better and more flexible ways to expand the functionality in the future without having to rewrite the whole data transmission and interface part again.
+
+
+### Planed (near future)
+
+#### User Accounts 🙆
+
+Groundwork for private information inside the rag chain, like uploading your own documents, or connecting LLocalSearch to services like Google Drive, or Confluence.
+
+#### Long term memory 🧠
+
+Not sure if there is a right way to implement this, but provide the main agent chain with information about the user, like preferences and having an extra Vector DB Namespace per user for persistent information.
+
+## Install Guide
+
+### Docker 🐳
+
+1. Clone the GitHub Repository
 
 ```bash
-git clone https://github.com/nilsherzig/LLocalsearch.git
-# 1. make sure to check the env vars inside the `docker-compose.dev.yaml`.
-# 2. Make sure you've really checked the dev compose file not the normal one.
-
-# 3. build the containers and start the services
-make dev 
-# Both front and backend will hot reload on code changes. 
+git@github.com:nilsherzig/LLocalSearch.git
+cd LLocalSearch
 ```
 
-If you don't have `make` installed, you can run the commands inside the Makefile manually.
+2. Create and edit an `.env` file, if you need to change some of the default settings. This is typically only needed if you have Ollama running on a different device or if you want to build a more complex setup (for more than your personal use f.ex.). Please read [Ollama Setup Guide](./Ollama_Guide.md) if you struggle to get the Ollama connection running.
 
-Now you should be able to access the frontend on [http://localhost:3000](http://localhost:3000).
+```bash
+touch .env
+code .env # open file with vscode
+nvim .env # open file with neovim
+```
+
+3. Run the containers
+
+```bash
+docker-compose up -d
+```
+

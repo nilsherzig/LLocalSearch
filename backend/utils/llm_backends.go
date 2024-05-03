@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ollama/ollama/api"
+	// "github.com/tmc/langchaingo/httputil"
 	"github.com/tmc/langchaingo/llms/ollama"
 )
 
@@ -21,7 +22,8 @@ func NewOllamaEmbeddingLLM() (*ollama.LLM, error) {
 func NewOllama(modelName string, contextSize int) (*ollama.LLM, error) {
 	return ollama.New(ollama.WithModel(modelName),
 		ollama.WithServerURL(os.Getenv("OLLAMA_HOST")),
-		ollama.WithRunnerNumCtx(contextSize), // TODO use the contextSize field from the request struct for this
+		ollama.WithRunnerNumCtx(contextSize),
+		// ollama.WithHTTPClient(httputil.DebugHTTPClient),
 	)
 }
 

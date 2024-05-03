@@ -11,27 +11,27 @@
 
 {#if showSettings}
 	<div
-		in:fade={{ duration: 300 }}
-		out:fade={{ duration: 300 }}
-		class="fixed backdrop-blur inset-0 z-10 flex flex-col items-center justify-center bg-opacity-20 dark:bg-opacity-80 bg-stone-950"
+		in:fade={{ duration: 100 }}
+		out:fade={{ duration: 100 }}
+		class="fixed backdrop-blur inset-0 z-10 flex flex-col items-center justify-center bg-opacity-20 dark:bg-opacity-80 bg-neutral-950"
 	>
 		<div
 			use:clickOutside
 			on:click_outside={() => {
 				showSettings = false;
 			}}
-			class="m-4 max-w-prose bg-stone-50 p-4 rounded-lg shadow-lg border-2 border-stone-300 dark:bg-stone-900 dark:border-stone-800 dark:text-stone-200 overflow-scroll z-50"
+			class="m-4 max-w-prose bg-neutral-50 p-4 rounded-lg shadow-lg border border-neutral-300 dark:bg-neutral-900 dark:border-neutral-800 dark:text-neutral-200 overflow-scroll z-50"
 		>
 			<div
-				class="flex flex-row justify-between border-b-2 border-b-stone-300 pb-2 dark:border-b-stone-700
-                text-stone-600 dark:text-stone-400
+				class="flex flex-row justify-between border-b border-b-neutral-300 pb-2 dark:border-b-neutral-700
+                text-neutral-600 dark:text-neutral-400
                 "
 			>
 				<p class="font-bold p-1">Settings</p>
 				<div>
 					<span title="reset settings">
 						<button
-							class="rounded-lg p-1 dark:bg-stone-900 bg-stone-50 hover:cursor-pointer hover:bg-stone-200 hover:text-stone-800 dark:hover:text-stone-300 transition-all dark:hover:bg-stone-800"
+							class="rounded-lg p-1 dark:bg-neutral-900 bg-neutral-50 hover:cursor-pointer hover:bg-neutral-200 hover:text-neutral-800 dark:hover:text-neutral-300 transition-all dark:hover:bg-neutral-800"
 							on:click={() => {
 								clientSettings = JSON.parse(JSON.stringify(defaultClientValues)); // holy fuck i hate js
 							}}
@@ -55,7 +55,7 @@
 					</span>
 					<span title="close settings">
 						<button
-							class="rounded-lg p-1 dark:bg-stone-900 bg-stone-50 hover:cursor-pointer hover:bg-stone-200 hover:text-stone-800 dark:hover:text-stone-300 transition-all dark:hover:bg-stone-800"
+							class="rounded-lg p-1 dark:bg-neutral-900 bg-neutral-50 hover:cursor-pointer hover:bg-neutral-200 hover:text-neutral-800 dark:hover:text-neutral-300 transition-all dark:hover:bg-neutral-800"
 							on:click={() => {
 								showSettings = false;
 							}}
@@ -86,7 +86,7 @@
 					<p>
 						The agent chain is using the
 						<select
-							class="bg-stone-200 dark:bg-stone-800 px-1 py-0.5 rounded"
+							class="bg-neutral-200 dark:bg-neutral-800 px-1 py-0.5 rounded"
 							bind:value={clientSettings.modelName}
 						>
 							{#if models != undefined}
@@ -105,7 +105,7 @@
 				<div>
 					<p>The llm uses the following system message:</p>
 					<textarea
-						class="bg-stone-200 dark:bg-stone-800 p-2 rounded w-full"
+						class="bg-neutral-200 dark:bg-neutral-800 p-2 rounded w-full"
 						rows="5"
 						bind:value={clientSettings.systemMessage}
 					/>

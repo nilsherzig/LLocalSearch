@@ -1,12 +1,26 @@
 package utils
 
+type ChatListItem struct {
+	SessionId string `json:"sessionid"`
+	Title     string `json:"title"`
+}
+
+type ChatHistoryItem struct {
+	Element HttpJsonStreamElement `json:"element"`
+}
+
+type HttpError struct {
+	Error string `json:"error"`
+}
+
 type HttpJsonStreamElement struct {
-	Close    bool     `json:"close"`
-	Message  string   `json:"message"`
-	Stream   bool     `json:"stream"`
-	StepType StepType `json:"stepType"`
-	Source   Source   `json:"source"`
-	Session  string   `json:"session"`
+	Message   string   `json:"message"`
+	Close     bool     `json:"close"`
+	Stream    bool     `json:"stream"`
+	StepType  StepType `json:"stepType"`
+	Source    Source   `json:"source"`
+	Session   string   `json:"session"`
+	TimeStamp int64    `json:"timeStamp"`
 }
 
 type ClientSettings struct {
@@ -50,12 +64,17 @@ const (
 	StepHandleToolError               StepType = "HandleToolError"
 	StepHandleToolStart               StepType = "HandleToolStart"
 	StepHandleVectorFound             StepType = "HandleVectorFound"
+	StepHandleFormat                  StepType = "HandleFormat"
+	StepHandleStreaming               StepType = "HandleStreaming"
+	StepHandleUserMessage             StepType = "HandleUserMessage"
 )
 
 type Source struct {
 	Name    string `json:"name"`
 	Link    string `json:"link"`
 	Summary string `json:"summary"`
+	Engine  string `json:"engine"`
+	Title   string `json:"title"`
 }
 
 type SeaXngResult struct {

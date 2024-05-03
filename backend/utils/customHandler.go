@@ -63,8 +63,9 @@ func (l CustomHandler) LogDebug(text string) {
 
 func (l CustomHandler) HandleStreamingFunc(_ context.Context, chunk []byte) {
 	l.OutputChan <- HttpJsonStreamElement{
-		Message: string(chunk),
-		Stream:  true,
+		Message:  string(chunk),
+		Stream:   true,
+		StepType: StepHandleStreaming,
 	}
 }
 

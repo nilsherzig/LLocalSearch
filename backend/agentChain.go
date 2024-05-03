@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nilsherzig/LLocalSearch/llm_tools"
 	"github.com/nilsherzig/LLocalSearch/utils"
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/chains"
+	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/memory"
-	"github.com/tmc/langchaingo/schema"
 	"github.com/tmc/langchaingo/tools"
 )
 
@@ -20,6 +21,50 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 			slog.Error("Recovered from panic", "error", r)
 		}
 	}()
+
+	if clientSettings.Session == "new" {
+		clientSettings.Session = utils.GetSessionString()
+		slog.Info("Created new session", "session", clientSettings.Session)
+	}
+
+	session := clientSettings.Session
+
+	if sessions[session].Buffer == nil {
+		sessions[session] = Session{
+			Title:  clientSettings.Prompt,
+			Buffer: memory.NewConversationWindowBuffer(clientSettings.ContextSize),
+		}
+		memory.NewChatMessageHistory()
+
+		sessions[session].Buffer.ChatHistory.AddMessage(ctx, llms.SystemChatMessage{
+			Content: clientSettings.SystemMessage,
+		})
+
+		outputChan <- utils.HttpJsonStreamElement{
+			StepType: utils.StepHandleNewSession,
+			Session:  session,
+			Stream:   false,
+		}
+
+		// TODO HACK remove this ugly workaround
+		// initializes the vector db namespace
+		// otherwise the go routine spam in the download func will
+		// race the intialization
+		initVectorDBNamespaceVar := llm_tools.SearchVectorDB{
+			CallbacksHandler: utils.CustomHandler{OutputChan: outputChan},
+			SessionString:    session,
+			Settings:         clientSettings,
+		}
+		initVectorDBNamespaceVar.Call(ctx, "")
+		slog.Info("Initialized vector db namespace", "session", session)
+	}
+	mem := sessions[session].Buffer
+
+	outputChan <- utils.HttpJsonStreamElement{
+		StepType: utils.StepHandleUserMessage,
+		Stream:   false,
+		Message:  clientSettings.Prompt,
+	}
 
 	neededModels := []string{utils.EmbeddingsModel, clientSettings.ModelName}
 	for _, modelName := range neededModels {
@@ -34,50 +79,24 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		}
 	}
 
-	if clientSettings.Session == "default" {
-		clientSettings.Session = utils.GetSessionString()
-	}
-
-	session := clientSettings.Session
-
-	if sessions[session] == nil {
-		slog.Info("Creating new session", "session", session)
-		sessions[session] = memory.NewConversationBuffer()
-		memory.NewChatMessageHistory()
-
-		sessions[session].ChatHistory.AddMessage(ctx, schema.SystemChatMessage{
-			Content: clientSettings.SystemMessage,
-		})
-
-		outputChan <- utils.HttpJsonStreamElement{
-			StepType: utils.StepHandleNewSession,
-			Session:  session,
-			Stream:   false,
-		}
-
-		// TODO HACK remove this ugly workaround
-		// initializes the vector db namespace
-		// otherwise the go routine spam in the download func will
-		// race the intialization
-		sad := llm_tools.SearchVectorDB{
-			CallbacksHandler: utils.CustomHandler{OutputChan: outputChan},
-			SessionString:    session,
-			Settings:         clientSettings,
-		}
-		sad.Call(ctx, "")
-	}
-	mem := sessions[session]
-
-	slog.Info("Starting agent chain", "session", session, "userQuery", clientSettings)
-
 	llm, err := utils.NewOllama(clientSettings.ModelName, clientSettings.ContextSize)
 	if err != nil {
 		slog.Error("Error creating new LLM", "error", err)
 		return err
 	}
 
+	slog.Info("Starting agent chain", "session", session, "userQuery", clientSettings)
+	startTime := time.Now()
+
 	agentTools := []tools.Tool{
-		tools.Calculator{},
+		llm_tools.WebScrape{
+			CallbacksHandler: utils.CustomHandler{
+				OutputChan: outputChan,
+			},
+			SessionString: session,
+			Settings:      clientSettings,
+		},
+
 		llm_tools.WebSearch{
 			CallbacksHandler: utils.CustomHandler{
 				OutputChan: outputChan,
@@ -85,6 +104,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 			SessionString: session,
 			Settings:      clientSettings,
 		},
+
 		llm_tools.SearchVectorDB{
 			CallbacksHandler: utils.CustomHandler{OutputChan: outputChan},
 			SessionString:    session,
@@ -92,10 +112,9 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		},
 	}
 
-	executor, err := agents.Initialize(
-		llm,
+	mainExecutor := agents.NewExecutor(
+		agents.NewConversationalAgent(llm, agentTools, agents.WithCallbacksHandler(utils.CustomHandler{OutputChan: outputChan})),
 		agentTools,
-		agents.ConversationalReactDescription,
 		agents.WithParserErrorHandler(agents.NewParserErrorHandler(func(s string) string {
 			outputChan <- utils.HttpJsonStreamElement{
 				Message:  fmt.Sprintf("Parsing Error. %s", s),
@@ -106,14 +125,8 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 			return utils.ParsingErrorPrompt()
 		})),
 		agents.WithMaxIterations(clientSettings.MaxIterations),
-		agents.WithCallbacksHandler(utils.CustomHandler{
-			OutputChan: outputChan,
-		}),
 		agents.WithMemory(mem),
 	)
-	if err != nil {
-		return err
-	}
 
 	// TODO: replace this with something smarter
 	// currently used to tell the frotend, that everything worked so far
@@ -124,14 +137,31 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 
 	temp := clientSettings.Temperature
 
-	ans, err := chains.Run(ctx, executor, clientSettings.Prompt, chains.WithTemperature(temp))
+	originalAnswer, err := chains.Run(ctx, mainExecutor, clientSettings.Prompt, chains.WithTemperature(temp))
+
 	if err != nil {
 		return err
 	}
-	slog.Info("Ended agent chain", "session", session, "userQuery", clientSettings, "answer", ans)
+	slog.Info("GotFirstAnswer", "session", session, "userQuery", clientSettings, "answer", originalAnswer, "time", time.Since(startTime))
+
+	messages, err := mem.ChatHistory.Messages(ctx)
+	if err != nil {
+		return err
+	}
+
+	ans, err := llm.Call(ctx, fmt.Sprintf("Please create a three (3) word title for the following conversation. Dont write anything else. Respond in the following Fromat `title: [your 3 word title]`. Conversation: ```%v```", messages))
+	if err != nil {
+		return err
+	}
+
+	slog.Info("GotTitleAnswer", "session", session, "answer", ans, "time", time.Since(startTime))
+	oldSession := sessions[session]
+	oldSession.Title = ans
+	sessions[session] = oldSession
 
 	outputChan <- utils.HttpJsonStreamElement{
-		Close: true,
+		Close:   true,
+		Message: sessions[session].Title,
 	}
 	return nil
 }
