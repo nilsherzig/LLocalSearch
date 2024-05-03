@@ -10,7 +10,7 @@
 	let cleanTitle = removePrefix(item.title);
 </script>
 
-<button on:click={() => loadHistory(item.sessionid)}>
+<button on:click={() => loadHistory(item.sessionid, cleanTitle)}>
 	<span title={cleanTitle}>
 		{#if item.sessionid === session}
 			<div
