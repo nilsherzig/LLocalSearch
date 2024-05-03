@@ -129,7 +129,7 @@ func modelsHandler(w http.ResponseWriter, r *http.Request) {
 // TODO improve the amount of data that is sent
 // currently 99% of the data is empty json keys haha
 func loadChatHistory(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(time.Millisecond * 350)
+	time.Sleep(time.Millisecond * 200)
 	setCorsHeaders(w)
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)

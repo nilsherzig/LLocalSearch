@@ -147,7 +147,6 @@
 					let cleanTitle = log.message.replace(/.*title: /, '');
 					window.history.replaceState(history.state, '', `/chat/${switchSession}`);
 					pageTitle = cleanTitle;
-					// loadHistory(switchSession, cleanTitle);
 				}
 				return;
 			}

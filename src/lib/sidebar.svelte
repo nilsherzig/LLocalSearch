@@ -42,7 +42,7 @@
 				<!-- 	<ChatList loading={true} /> -->
 				<!-- </div> -->
 			{:then chatListItems}
-				<div in:fade={{ duration: 100 }}>
+				<div in:fade={{ duration: 300 }}>
 					{#if chatListItems}
 						<ChatList {chatListItems} bind:session {loadHistory} />
 					{/if}
