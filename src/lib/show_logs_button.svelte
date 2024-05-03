@@ -2,7 +2,6 @@
 	import { draw } from 'svelte/transition';
 	import TopbarButton from './topbar_button.svelte';
 	export let showLogs: boolean;
-	$: console.log('showLogs', showLogs);
 </script>
 
 {#if showLogs}

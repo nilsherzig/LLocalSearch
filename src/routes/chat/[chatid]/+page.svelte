@@ -145,7 +145,9 @@
 				chatlistItems = fetchChats(); // update chat list, since title has changed
 				if (switchSession) {
 					let cleanTitle = log.message.replace(/.*title: /, '');
-					loadHistory(switchSession, cleanTitle);
+					window.history.replaceState(history.state, '', `/chat/${switchSession}`);
+					pageTitle = cleanTitle;
+					// loadHistory(switchSession, cleanTitle);
 				}
 				return;
 			}

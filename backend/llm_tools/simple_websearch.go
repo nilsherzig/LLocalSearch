@@ -39,8 +39,8 @@ func (ws WebSearch) Call(ctx context.Context, input string) (string, error) {
 		ws.CallbacksHandler.HandleToolStart(ctx, input)
 	}
 
-	// input = strings.TrimPrefix(input, "\"")
-	// input = strings.TrimSuffix(input, "\"")
+	input = strings.TrimPrefix(input, "\"")
+	input = strings.TrimSuffix(input, "\"")
 	inputQuery := url.QueryEscape(input)
 	searXNGDomain := os.Getenv("SEARXNG_DOMAIN")
 	url := fmt.Sprintf("%s/?q=%s&format=json", searXNGDomain, inputQuery)
