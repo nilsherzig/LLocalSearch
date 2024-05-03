@@ -39,10 +39,10 @@
 <div class="w-full flex items-center justify-around flex-col px-4">
 	<div class="max-w-prose w-full md:px-6">
 		<form
-			class="mb-2 max-w-prose flex gap-2 w-full align-middle bg-stone-100 shadow items-center border-stone-300 border p-1 rounded-lg focus-within:shadow-lg focus-within:border-stone-400 focus-within:dark:border-stone-500 transition-all dark:bg-stone-800 dark:border-stone-700"
+			class="mb-2 max-w-prose flex gap-2 w-full align-middle bg-neutral-100 shadow items-center border-neutral-300 border p-1 rounded-lg focus-within:shadow-lg focus-within:border-neutral-400 focus-within:dark:border-neutral-500 transition-all dark:bg-neutral-800 dark:border-neutral-700"
 		>
 			<textarea
-				class="resize-none outline-none rounded bg-stone-100 py-1 px-2 text-stone-700 flex-grow dark:bg-stone-800 dark:text-stone-100 transition-all"
+				class="resize-none outline-none rounded bg-neutral-100 py-1 px-2 text-neutral-700 flex-grow dark:bg-neutral-800 dark:text-neutral-100 transition-all"
 				bind:value={prompt}
 				bind:this={textArea}
 				on:input={autoResize}
@@ -54,7 +54,7 @@
 			<ChatButton {prompt} bind:sendMode bind:eventSource {sendPrompt} {newChat} {stopChat} />
 		</form>
 	</div>
-	<!-- <span class="text-stone-300 text-xs pb-1" -->
+	<!-- <span class="text-neutral-300 text-xs pb-1" -->
 	<!-- 	>Its impossible for LLocalSearch to make mistakes, dont question anything</span -->
 	<!-- > -->
 </div>

@@ -149,7 +149,7 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		return err
 	}
 
-	ans, err := llm.Call(ctx, fmt.Sprintf("Please three word long title for the following conversation. Dont write anything else. Respond in the following Fromat `title: [your 3 word title]`. Conversation: ```%v```", messages))
+	ans, err := llm.Call(ctx, fmt.Sprintf("Please create a three (3) word title for the following conversation. Dont write anything else. Respond in the following Fromat `title: [your 3 word title]`. Conversation: ```%v```", messages))
 	if err != nil {
 		return err
 	}

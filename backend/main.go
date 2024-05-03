@@ -29,34 +29,50 @@ func main() {
 		}),
 	))
 
-	exampleUuid := "how-are-you"
-	sessions[exampleUuid] = Session{
-		Title:  "How are you?",
-		Buffer: memory.NewConversationWindowBuffer(1024 * 8),
-	}
-	newFakeSession := Session{
-		Title:  "How are you?",
-		Buffer: memory.NewConversationWindowBuffer(1024 * 8),
-	}
-	newFakeSession.Buffer.ChatHistory.AddUserMessage(context.Background(), "How are you?")
-	newFakeSession.Buffer.ChatHistory.AddAIMessage(context.Background(), "I'm fine, thank you.")
-	newFakeSession.Elements = []utils.HttpJsonStreamElement{
-		{
-			Message: "How are you?",
-			Close:   false,
-			Stream:  false,
-		},
-		{
-			Message:  "I'm fine, thank you.",
-			Close:    false,
-			Stream:   true,
-			StepType: utils.StepHandleFinalAnswer,
-		},
-	}
-	sessions["how-are-you"] = newFakeSession
+	SetupTutorialChatHistory()
 	slog.Info("created example session")
 
 	// lschains.RunSourceChainExample()
 	slog.Info("Starting the server")
 	StartApiServer()
+}
+
+func SetupTutorialChatHistory() {
+	newFakeSession := Session{
+		Title:  "LLocalSearch Tutorial",
+		Buffer: memory.NewConversationWindowBuffer(1024 * 8),
+	}
+	userQuestion := "How does LLocalSearch work?"
+	newFakeSession.Buffer.ChatHistory.AddUserMessage(context.Background(), userQuestion)
+
+	tutorialMessageOne := `## Welcome to the LLocalSearch tutorial.
+### How it works
+
+asdasd
+
+### What you can do
+
+### How to get started
+
+### Customizing your experience
+
+### Contributing / Reporting issues
+`
+	newFakeSession.Buffer.ChatHistory.AddAIMessage(context.Background(), tutorialMessageOne)
+
+	newFakeSession.Elements = []utils.HttpJsonStreamElement{
+		{
+			Message:  "How does LLocalSearch work?",
+			Close:    false,
+			Stream:   false,
+			StepType: utils.StepHandleUserMessage,
+		},
+		{
+			Message:  tutorialMessageOne,
+			Close:    false,
+			Stream:   true,
+			StepType: utils.StepHandleFinalAnswer,
+		},
+	}
+	sessions["tutorial"] = newFakeSession
 }

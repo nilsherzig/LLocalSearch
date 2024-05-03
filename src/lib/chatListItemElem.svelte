@@ -3,20 +3,27 @@
 	export let item: ChatListItem;
 	export let session: string;
 	export let loadHistory: Function;
+	function removePrefix(str: string) {
+		let reg = /.*title: /;
+		return str.replace(reg, '');
+	}
+	let cleanTitle = removePrefix(item.title);
 </script>
 
 <button on:click={() => loadHistory(item.sessionid)}>
-	{#if item.sessionid === session}
-		<div
-			class="text-left p-1 px-2 shadow-inner hover:cursor-pointer truncate rounded bg-stone-200 dark:bg-stone-700 transition-all text-sm dark:text-stone-300"
-		>
-			<span>{item.title.replace('title: ', '')}</span>
-		</div>
-	{:else}
-		<div
-			class="text-left p-1 px-2 hover:cursor-pointer hover:shadow-inner truncate rounded bg-stone-100 hover:bg-stone-200 dark:bg-stone-900 hover:dark:bg-stone-700 dark:text-stone-300 transition-all text-sm"
-		>
-			<span>{item.title.replace('title: ', '')}</span>
-		</div>
-	{/if}
+	<span title={cleanTitle}>
+		{#if item.sessionid === session}
+			<div
+				class="text-left p-1 px-2 shadow-inner hover:cursor-pointer truncate rounded bg-neutral-200 dark:bg-neutral-700 transition-all text-sm dark:text-neutral-300"
+			>
+				<span>{cleanTitle}</span>
+			</div>
+		{:else}
+			<div
+				class="text-left p-1 px-2 hover:cursor-pointer hover:shadow-inner truncate rounded bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 hover:dark:bg-neutral-700 dark:text-neutral-300 transition-all text-sm"
+			>
+				<span>{cleanTitle}</span>
+			</div>
+		{/if}
+	</span>
 </button>

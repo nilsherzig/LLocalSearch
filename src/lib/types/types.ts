@@ -8,6 +8,7 @@ export type LogElement = {
     stepType: StepType;
     stream: boolean;
     session: string;
+    timeStamp: number;
 };
 
 export type ChatListItem = {

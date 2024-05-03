@@ -6,7 +6,7 @@
 </script>
 
 {#if showSidebar}
-	<TopbarButton action={() => (showSidebar = false)}>
+	<TopbarButton action={() => (showSidebar = false)} title={'hide sidebar'}>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			fill="none"
@@ -24,7 +24,7 @@
 		</svg>
 	</TopbarButton>
 {:else}
-	<TopbarButton action={() => (showSidebar = true)}>
+	<TopbarButton action={() => (showSidebar = true)} title={'show sidebar'}>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			fill="none"

@@ -10,12 +10,12 @@
 </script>
 
 <div
-	class="text-stone-500 hover:text-stone-700 rounded-2xl hover:cursor-pointer transition-all dark:text-stone-500 dark:hover:text-stone-200"
+	class="text-neutral-500 hover:text-neutral-700 rounded-2xl hover:cursor-pointer transition-all dark:text-neutral-500 dark:hover:text-neutral-200"
 >
 	{#if sendMode && prompt != ''}
 		<span title="send message">
 			<button
-				class="bg-stone-100 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-200 hover:shadow-inner border border-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
+				class="bg-neutral-100 text-neutral-500 hover:text-neutral-700 hover:cursor-pointer hover:bg-neutral-200 hover:shadow-inner border border-neutral-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-600 dark:hover:text-neutral-300"
 				on:click={() => {
 					sendPrompt();
 				}}
@@ -40,7 +40,7 @@
 	{:else if !sendMode && eventSource}
 		<span title="stop chat">
 			<button
-				class="bg-stone-100 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-200 hover:shadow-inner border border-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300"
+				class="bg-neutral-100 text-neutral-500 hover:text-neutral-700 hover:cursor-pointer hover:bg-neutral-200 hover:shadow-inner border border-neutral-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-600 dark:hover:text-neutral-300"
 				on:click={() => {
 					stopChat();
 					sendMode = true;
@@ -66,7 +66,7 @@
 	{:else}
 		<span title="new chat">
 			<button
-				class="bg-stone-100 text-stone-500 hover:text-stone-700 hover:cursor-pointer hover:bg-stone-200 hover:shadow-inner border border-stone-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 dark:hover:text-stone-300 dark:border-stone-500"
+				class="bg-neutral-100 text-neutral-500 hover:text-neutral-700 hover:cursor-pointer hover:bg-neutral-200 hover:shadow-inner border border-neutral-300 m-1 p-1 transition-all rounded-xl w-8 h-8 dark:bg-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-600 dark:hover:text-neutral-300 dark:border-neutral-500"
 				on:click={() => {
 					newChat();
 					console.log('new chat');

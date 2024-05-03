@@ -23,6 +23,7 @@
 	import SidebarHistoryToggle from '$lib/sidebar_history_toggle.svelte';
 	import Sidebar from '$lib/sidebar.svelte';
 	import ToggleSettingsButton from '$lib/toggle_settings_button.svelte';
+	import { pushState, replaceState } from '$app/navigation';
 
 	// let chatHistory: Promise<LogElement[]>;
 	let chatLoadID = $page.params.chatid;
@@ -50,12 +51,17 @@
 		// });
 		chatLoadID = id;
 		window.history.replaceState(history.state, '', `/chat/${id}`);
+		// $page.state.chatid = id;
+		// pushState(`/chat/${id}`, $page.state.chatid);
 	}
 	onMount(() => {
 		if ($page.params.chatid) {
 			loadHistory($page.params.chatid);
 		}
 	});
+	// $: loadHistory($page.params.chatid);
+	// $: loadHistory($page.state.chatid);
+	// $: console.log('page state', $page.state.chatid);
 
 	export let showLogs = false;
 	let currentLogs: LogElement[] = [];
@@ -116,7 +122,6 @@
 		eventSource = new EventSource(url);
 		eventSource.onmessage = (event: MessageEvent) => {
 			let log: LogElement = JSON.parse(event.data);
-			console.log(currentLogs.length);
 			if (log.stepType == StepType.HandleNewSession) {
 				console.log('new session', log.session);
 				clientValues.session = log.session;
@@ -226,7 +231,7 @@
 		href="https://fonts.googleapis.com/css2?family=Vollkorn:ital,wght@0,400..900;1,400..900&display=swap"
 		rel="stylesheet"
 	/>
-	<title>Chat</title>
+	<!-- <title>Chat</title> -->
 </svelte:head>
 
 <SettingsWindow
@@ -235,9 +240,9 @@
 	{defaultClientValues}
 	bind:showSettings
 />
-<div class="flex flex-col h-svh w-svw text-stone-800">
+<div class="flex flex-col h-svh w-svw text-neutral-800">
 	<div
-		class="w-full bg-stone-100 flex px-2 pt-2 justify-between border-b border-stone-300 dark:bg-stone-900 dark:border-stone-700"
+		class="w-full bg-neutral-100 flex px-2 pt-2 justify-between border-b border-neutral-300 dark:bg-neutral-900 dark:border-neutral-700"
 	>
 		<div class="flex gap-2">
 			<ToggleSidebarButton bind:showSidebar />
@@ -290,7 +295,7 @@
 					<p class="text-red-600">{error.message}</p>
 				{/await}
 			</div>
-			<div class="sticky justify-center pt-1">
+			<div class="sticky justify-center pt-2">
 				<BottomBar
 					bind:sendMode
 					bind:eventSource
@@ -306,11 +311,11 @@
 
 <style lang="postcss">
 	:global(html) {
-		background-color: theme(colors.stone.200);
+		background-color: theme(colors.neutral.200);
 		font-family: 'Vollkorn', serif;
 	}
 	:global(html.dark) {
-		background-color: theme(colors.stone.950);
+		background-color: theme(colors.neutral.950);
 		font-family: 'Vollkorn', serif;
 	}
 </style>

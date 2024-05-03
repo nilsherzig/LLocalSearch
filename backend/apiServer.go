@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/nilsherzig/LLocalSearch/utils"
@@ -52,6 +53,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			output.TimeStamp = time.Now().Unix()
 
 			if output.StepType == utils.StepHandleNewSession {
 				clientSettings.Session = output.Session
@@ -124,6 +126,8 @@ func modelsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonModels)
 }
 
+// TODO improve the amount of data that is sent
+// currently 99% of the data is empty json keys haha
 func loadChatHistory(w http.ResponseWriter, r *http.Request) {
 	time.Sleep(time.Millisecond * 350)
 	setCorsHeaders(w)
@@ -188,6 +192,13 @@ func chatListHandler(w http.ResponseWriter, r *http.Request) {
 			Title:     sessions[sessionid].Title,
 		})
 	}
+	// sort chatIds by timestamp
+	// TODO HACK this is wildly inefficient
+	sort.Slice(chatIds, func(i, j int) bool {
+		iLen := len(sessions[chatIds[i].SessionId].Elements)
+		jLen := len(sessions[chatIds[j].SessionId].Elements)
+		return sessions[chatIds[i].SessionId].Elements[iLen-1].TimeStamp > sessions[chatIds[j].SessionId].Elements[jLen-1].TimeStamp
+	})
 
 	jsonChatIds, err := json.Marshal(chatIds)
 	if err != nil {

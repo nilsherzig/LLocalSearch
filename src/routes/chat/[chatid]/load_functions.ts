@@ -8,10 +8,6 @@ export async function fetchChats(): Promise<ChatListItem[]> {
             throw new Error(data['error']);
         }
     }
-    // sort chats by name
-    data.sort((a: ChatListItem, b: ChatListItem) => {
-        return a.title.localeCompare(b.title);
-    });
     return data;
 }
 export async function fetchHistory(id: string): Promise<LogElement[]> {
@@ -40,6 +36,7 @@ export function parseLogArray(history: LogElement[]) {
     let logBuffer: LogElement[] = [];
     for (const historyItem of history) {
         if (historyItem.message) {
+            historyItem.message = historyItem.message.replaceAll('<|im_end|>', '').replaceAll('<|end_of_turn|>', '');
             if (historyItem.stream) {
                 if (lastLogitemWasStream) {
                     logBuffer[logBuffer.length - 1].message += historyItem.message;

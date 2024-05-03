@@ -14,12 +14,13 @@ type HttpError struct {
 }
 
 type HttpJsonStreamElement struct {
-	Message  string   `json:"message"`
-	Close    bool     `json:"close"`
-	Stream   bool     `json:"stream"`
-	StepType StepType `json:"stepType"`
-	Source   Source   `json:"source"`
-	Session  string   `json:"session"`
+	Message   string   `json:"message"`
+	Close     bool     `json:"close"`
+	Stream    bool     `json:"stream"`
+	StepType  StepType `json:"stepType"`
+	Source    Source   `json:"source"`
+	Session   string   `json:"session"`
+	TimeStamp int64    `json:"timeStamp"`
 }
 
 type ClientSettings struct {

@@ -27,7 +27,7 @@
 			<!-- error -->
 			{#if logElement.stepType == StepType.HandleChainError || logElement.stepType == StepType.HandleToolError || logElement.stepType == StepType.HandleLlmError || logElement.stepType == StepType.HandleParseError}
 				<div
-					class="rounded-lg shadow my-2 p-2 bg-stone-50 text-stone-600 border-red-600 border-2 dark:bg-stone-800 dark:text-stone-200"
+					class="rounded-lg shadow my-2 p-2 bg-neutral-50 text-neutral-600 border-red-600 border-2 dark:bg-neutral-800 dark:text-neutral-200"
 				>
 					{#if logElement.message.includes('Parsing Error.')}
 						<span
@@ -35,28 +35,28 @@
 							using a LLM trained on structured output or function calling.</span
 						>
 					{:else}
-						<article class="p-2 prose prose-stone dark:prose-invert">
+						<article class="p-2 prose prose-neutral dark:prose-invert">
 							{@html marked.parse(logElement.message)}
 						</article>
 					{/if}
 				</div>
 				<!-- ollama model load message -->
 			{:else if logElement.stepType == StepType.HandleOllamaModelLoadMessage}
-				<div class="flex text-stone-500 dark:text-stone-400 p-4 gap-4">
+				<div class="flex text-neutral-500 dark:text-neutral-400 p-4 gap-4">
 					{logElement.message}
 				</div>
 				<!-- user prompt  -->
 			{:else if logElement.stepType == StepType.HandleUserMessage}
-				<div class="border border-t-stone-200 dark:border-stone-800 mt-10 rounded"></div>
+				<div class="border border-t-neutral-300 dark:border-neutral-800 mt-10 rounded"></div>
 				<div
-					class="my-2 p-2 text-stone-700 dark:text-stone-200 dark:border-stone-400 font-semibold text-lg"
+					class="my-2 p-2 text-neutral-700 dark:text-neutral-200 dark:border-neutral-400 font-semibold text-lg"
 				>
 					{logElement.message}
 				</div>
 				<!-- stream message -->
 			{:else if logElement.stream || logElement.stepType == StepType.HandleFinalAnswer}
 				{#if logElement.message.includes('Action: webscrape')}
-					<div class="flex text-stone-500 dark:text-stone-400 p-4 gap-4">
+					<div class="flex text-neutral-500 dark:text-neutral-400 p-4 gap-4">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -80,7 +80,7 @@
 						<span>{logElement.message.split('Action Input:')[1] || ''}</span>
 					</div>
 				{:else if logElement.message.includes('Action: database_search')}
-					<div class="flex text-stone-500 dark:text-stone-400 p-4 gap-4">
+					<div class="flex text-neutral-500 dark:text-neutral-400 p-4 gap-4">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -99,7 +99,7 @@
 						<span>{logElement.message.split('Action Input:')[1] || ''}</span>
 					</div>
 				{:else if logElement.message.includes('Action: websearch')}
-					<div class="flex text-stone-500 dark:text-stone-400 p-4 gap-4">
+					<div class="flex text-neutral-500 dark:text-neutral-400 p-4 gap-4">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -119,9 +119,9 @@
 					</div>
 				{:else}
 					<div
-						class="rounded my-2 p-2 bg-stone-100 text-stone-600 border-stone-300 border dark:bg-stone-800 dark:text-stone-300 dark:border-stone-700"
+						class="rounded my-2 p-2 bg-neutral-100 text-neutral-600 border-neutral-300 border dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700"
 					>
-						<article class="p-2 prose prose-stone dark:prose-invert">
+						<article class="p-2 prose prose-neutral dark:prose-invert">
 							{@html marked.parse(
 								logElement.message
 									.replace('Thought: Do I need to use a tool? No\n', '')
@@ -131,6 +131,7 @@
 									.replace('AI:', '')
 							)}
 						</article>
+						<!-- <span>{logElement.timeStamp}</span> -->
 					</div>
 				{/if}
 			{/if}
@@ -138,28 +139,28 @@
 			{#if showLogs}
 				{#if logElement.stepType == StepType.HandleToolStart}
 					<div
-						class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-500 border-stone-300 border-2 dark:bg-stone-900 dark:text-stone-400 dark:border-stone-700"
+						class="rounded-lg shadow my-2 p-2 bg-neutral-100 text-neutral-500 border-neutral-300 border-2 dark:bg-neutral-900 dark:text-neutral-400 dark:border-neutral-700"
 					>
 						<span class="font-bold">Tool start</span>
 						<span>{logElement.message}</span>
 					</div>
 				{:else if logElement.stepType == StepType.HandleAgentAction}
 					<div
-						class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-500 border-stone-300 border-2 dark:bg-stone-900 dark:text-stone-400 dark:border-stone-700"
+						class="rounded-lg shadow my-2 p-2 bg-neutral-100 text-neutral-500 border-neutral-300 border-2 dark:bg-neutral-900 dark:text-neutral-400 dark:border-neutral-700"
 					>
 						<span class="font-bold">Agent Action</span>
 						<span>{logElement.message}</span>
 					</div>
 				{:else if logElement.stepType == StepType.HandleChainStart}
 					<div
-						class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-500 border-stone-300 border-2 dark:bg-stone-900 dark:text-stone-400 dark:border-stone-700"
+						class="rounded-lg shadow my-2 p-2 bg-neutral-100 text-neutral-500 border-neutral-300 border-2 dark:bg-neutral-900 dark:text-neutral-400 dark:border-neutral-700"
 					>
 						<span class="font-bold">Chain start</span>
 						<span>{logElement.message}</span>
 					</div>
 				{:else if logElement.stepType == StepType.HandleChainEnd}
 					<div
-						class="rounded-lg shadow my-2 p-2 bg-stone-100 text-stone-500 border-stone-300 border-2 dark:bg-stone-900 dark:text-stone-400 dark:border-stone-700"
+						class="rounded-lg shadow my-2 p-2 bg-neutral-100 text-neutral-500 border-neutral-300 border-2 dark:bg-neutral-900 dark:text-neutral-400 dark:border-neutral-700"
 					>
 						<span class="font-bold">Chain end</span>
 						<span>{logElement.message}</span>
