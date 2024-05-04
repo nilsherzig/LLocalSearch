@@ -4,15 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/nilsherzig/LLocalSearch/llm_tools"
 	"github.com/nilsherzig/LLocalSearch/utils"
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/chains"
+	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/memory"
 	"github.com/tmc/langchaingo/tools"
+	"github.com/tmc/langchaingo/vectorstores/chroma"
 )
 
 func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStreamElement, clientSettings utils.ClientSettings) error {
@@ -50,12 +53,24 @@ func startAgentChain(ctx context.Context, outputChan chan<- utils.HttpJsonStream
 		// initializes the vector db namespace
 		// otherwise the go routine spam in the download func will
 		// race the intialization
-		initVectorDBNamespaceVar := llm_tools.SearchVectorDB{
-			CallbacksHandler: utils.CustomHandler{OutputChan: outputChan},
-			SessionString:    session,
-			Settings:         clientSettings,
+		llm, err := utils.NewOllamaEmbeddingLLM()
+		if err != nil {
+			return err
 		}
-		initVectorDBNamespaceVar.Call(ctx, "")
+		embeder, err := embeddings.NewEmbedder(llm)
+		if err != nil {
+			return err
+		}
+		_, errNs := chroma.New(
+			chroma.WithChromaURL(os.Getenv("CHROMA_DB_URL")),
+			chroma.WithEmbedder(embeder),
+			chroma.WithDistanceFunction("cosine"),
+			chroma.WithNameSpace(session),
+		)
+		if errNs != nil {
+			slog.Error("Error creating new vector db namespace", "error", errNs)
+			return errNs
+		}
 		slog.Info("Initialized vector db namespace", "session", session)
 	}
 	mem := sessions[session].Buffer
