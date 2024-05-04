@@ -1,4 +1,7 @@
 FROM node:20-alpine3.19 AS builder
+ARG PUBLIC_VERSION="0.0.0"
+ENV PUBLIC_VERSION=${PUBLIC_VERSION}
+RUN echo "Building PUBLIC_VERSION ${PUBLIC_VERSION}"
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci

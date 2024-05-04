@@ -1,4 +1,6 @@
 <script lang="ts">
+	// @ts-ignore: this is a sveltekit thing
+	import { PUBLIC_VERSION } from '$env/static/public';
 	import { slide } from 'svelte/transition';
 	import { onDestroy, onMount } from 'svelte';
 	import ToggleSidebarButton from '$lib/toggle_sidebar_button.svelte';
@@ -8,14 +10,14 @@
 		type Source,
 		type ClientSettings,
 		StepType,
-		type ChatListItem
+		type ChatListItem,
+		type Problem
 	} from '$lib/types/types';
 	import LogItem from '$lib/log_item.svelte';
 	import { changeDarkMode } from './handle_darkmode';
-	import { fetchChats, fetchHistory } from './load_functions';
+	import { fetchChats, fetchHistory, runMetrics } from './load_functions';
 	import BottomBar from '$lib/bottom_bar.svelte';
 	import { page } from '$app/stores';
-	import NewChatButton from '$lib/new_chat_button.svelte';
 	import ShowLogsButton from '$lib/show_logs_button.svelte';
 	import ToggleDarkmodeButton from '$lib/toggle_darkmode_button.svelte';
 	import SettingsWindow from '$lib/settings_window.svelte';
@@ -23,11 +25,9 @@
 	import SidebarHistoryToggle from '$lib/sidebar_history_toggle.svelte';
 	import Sidebar from '$lib/sidebar.svelte';
 	import ToggleSettingsButton from '$lib/toggle_settings_button.svelte';
-	import { pushState, replaceState } from '$app/navigation';
 	let innerWidth = 0;
 	let innerHeight = 0;
 
-	// let chatHistory: Promise<LogElement[]>;
 	let chatLoadID = $page.params.chatid;
 	let pageTitle = 'LLocalSearch';
 	function loadHistory(id: string, title: string) {
@@ -47,11 +47,6 @@
 		searchSources = [];
 		currentLogs = [{}];
 		clientValues.session = id;
-		// chatHistory = fetchHistory(id);
-		// console.log(`loading history ${id}`);
-		// chatHistory.then((history) => {
-		// 	console.log(history);
-		// });
 		chatLoadID = id;
 		window.history.replaceState(history.state, '', `/chat/${id}`);
 		if (title) {
@@ -60,17 +55,12 @@
 		if (userHasSmallWindow) {
 			showSidebar = false;
 		}
-		// $page.state.chatid = id;
-		// pushState(`/chat/${id}`, $page.state.chatid);
 	}
 	onMount(() => {
 		if ($page.params.chatid) {
 			loadHistory($page.params.chatid, 'LLocalSearch');
 		}
 	});
-	// $: loadHistory($page.params.chatid);
-	// $: loadHistory($page.state.chatid);
-	// $: console.log('page state', $page.state.chatid);
 
 	export let showLogs = false;
 	let currentLogs: LogElement[] = [];
@@ -81,20 +71,18 @@
 	let sendMode = true;
 	let searchSources: Source[] = [];
 	const defaultClientValues: ClientSettings = {
-		// default values, will be overwritten by local storage if available
 		maxIterations: 30,
 		contextSize: 8 * 1024,
 		temperature: 0,
-		// modelName: 'llama3:8b-instruct-q6_K',
-		// modelName: 'adrienbrault/nous-hermes2pro:Q8_0',
-		modelName: 'adrienbrault/nous-hermes2pro-llama3-8b:q6_K',
+		// modelName: 'adrienbrault/nous-hermes2pro-llama3-8b:q6_K',
+		modelName: 'adrienbrault/nous-hermes2pro-llama3-8b:q8_0',
 		prompt: '',
 		toolNames: [],
 		webSearchCategories: [],
 		session: 'new',
-		amountOfResults: 4,
+		amountOfResults: 10,
 		minResultScore: 0.5,
-		amountOfWebsites: 10,
+		amountOfWebsites: 3,
 		chunkSize: 300,
 		chunkOverlap: 100,
 		systemMessage: `1. Format your "final answer" in markdown.
@@ -236,6 +224,25 @@
 	onMount(() => {
 		chatlistItems = fetchChats();
 	});
+
+	let problems: Problem[] = [];
+	onMount(() => {
+		if (PUBLIC_VERSION === 'dev') {
+			console.log('dev version, not sending metrics');
+			return;
+		}
+		console.log('updating metrics');
+		runMetrics(PUBLIC_VERSION, clientValues.modelName)
+			.then((response) => {
+				console.log('metrics response', response);
+				if (response.problems) {
+					problems = response.problems;
+				}
+			})
+			.catch((error) => {
+				console.error('metrics error', error);
+			});
+	});
 </script>
 
 <svelte:head>
@@ -255,6 +262,14 @@
 	{defaultClientValues}
 	bind:showSettings
 />
+
+{#each problems as problem}
+	<div class="bg-red-100 text-red-900 p-4" in:slide>
+		<p class="font-semibold">{problem.title}</p>
+		<p>{problem.msg}</p>
+	</div>
+{/each}
+
 <div class="flex flex-col h-svh w-svw text-neutral-800">
 	<div
 		class="w-full bg-neutral-100 flex px-2 pt-2 justify-between border-b border-neutral-300 dark:bg-neutral-900 dark:border-neutral-700"

@@ -46,7 +46,14 @@ func SetupTutorialChatHistory() {
 	newFakeSession.Buffer.ChatHistory.AddUserMessage(context.Background(), userQuestion)
 
 	tutorialMessageOne := `## Welcome to the LLocalSearch tutorial.
-    Todo 
+Still working on this haha 👷 
+
+Just ask a question. LLocalSearch will decide how complex the question is and will try to answer it.
+- 🌍 The question is easy and only the search result preview texts are used to answer it
+- 👀 The question requires a bit more context and the full search results texts are used to answer it
+- 📁 Already scraped data is used to answer the question
+
+You can start asking in this chat or open a new one. 🚀
 `
 	newFakeSession.Buffer.ChatHistory.AddAIMessage(context.Background(), tutorialMessageOne)
 
