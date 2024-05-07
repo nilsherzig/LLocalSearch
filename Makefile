@@ -8,9 +8,9 @@ CURRENT_TIMESTAMP := $(shell date +%s)
 PHONY: build-container
 build-container:
 	docker buildx build --build-arg="PUBLIC_VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/llocalsearch-frontend:latest --load
-	(cd ./backend/ && docker buildx build . -t nilsherzig/llocalsearch-backend:latest --load)
-
-	(cd ./metrics/ && docker buildx build --build-arg="VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/lsm:latest --load)
+	# (cd ./backend/ && docker buildx build . -t nilsherzig/llocalsearch-backend:latest --load)
+	#
+	# (cd ./metrics/ && docker buildx build --build-arg="VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/lsm:latest --load)
 
 PHONY: release-container
 release-container: build-container
