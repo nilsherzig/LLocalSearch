@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type Message struct {
@@ -41,6 +42,8 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	slog.Info("Request", "method", r.Method, "url", r.URL, "remote", strings.Split(r.RemoteAddr, ":")[0])
+
 	// read body and log it
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -49,8 +52,7 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	rb := metricsReqBody{}
 	err = json.Unmarshal(body, &rb)
 
-	ipHash := hash(r.RemoteAddr)
-	slog.Info("Client", "iphash", ipHash, "version", rb.Version, "model", rb.Model)
+	ipHash := hash(strings.Split(r.RemoteAddr, ":")[0])
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 
@@ -64,6 +66,7 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp.Problems = problems
 
+	slog.Info("Client", "iphash", ipHash, "version", rb.Version, "model", rb.Model, "problems", problems)
 	json.NewEncoder(w).Encode(resp)
 }
 
