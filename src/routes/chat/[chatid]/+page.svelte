@@ -90,7 +90,33 @@
 3. Answer in the same language as the question.`
 	};
 
+	let skipSetLocalStorage = true;
+	function setLocalStorage(key: string, value: string) {
+		if (typeof window === 'undefined') return;
+
+		if (skipSetLocalStorage) {
+			skipSetLocalStorage = false;
+			return;
+		}
+
+		if (value === undefined) {
+			return;
+		}
+		// console.log('setting local storage', key, value);
+		localStorage.setItem(key, value);
+	}
 	let clientValues: ClientSettings = defaultClientValues;
+	$: setLocalStorage('clientSettings', JSON.stringify(clientValues));
+	onMount(() => {
+		if (localStorage.clientSettings) {
+			// yes i also hate this, i will move the session and prompt
+			// to a differnet struct in the future
+			let oldClientValues = JSON.parse(localStorage.clientSettings);
+			oldClientValues.session = clientValues.session;
+			clientValues = oldClientValues;
+			console.log('loaded client settings', clientValues);
+		}
+	});
 
 	function newChat() {
 		loadHistory('new', 'new chat');
