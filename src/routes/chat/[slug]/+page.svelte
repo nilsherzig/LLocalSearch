@@ -28,7 +28,7 @@
 	let innerWidth = 0;
 	let innerHeight = 0;
 
-	let chatLoadID = $page.params.chatid;
+	let chatLoadID = $page.params.slug;
 	let pageTitle = 'LLocalSearch';
 	function loadHistory(id: string, title: string) {
 		console.log('loading history', id);
@@ -56,11 +56,12 @@
 			showSidebar = false;
 		}
 	}
-	onMount(() => {
-		if ($page.params.chatid) {
-			loadHistory($page.params.chatid, 'LLocalSearch');
-		}
-	});
+
+	// onMount(() => {
+	// 	if ($page.params.slug) {
+	// 		loadHistory($page.params.slug, 'LLocalSearch');
+	// 	}
+	// });
 
 	export let showLogs = false;
 	let currentLogs: LogElement[] = [];

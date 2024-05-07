@@ -35,6 +35,7 @@ export async function runMetrics(version: string, model: string): Promise<Metric
 }
 export async function fetchHistory(id: string): Promise<LogElement[]> {
     if (!id) {
+        console.error("No id provided");
         return [];
     }
     if (id == "new") {
