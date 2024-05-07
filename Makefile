@@ -2,6 +2,25 @@ DOCKER_HUB_USER ?= nilsherzig
 BACKEND_NAME ?= llocalsearch-backend
 FRONTEND_NAME ?= llocalsearch-frontend
 GIT_HASH := $(shell git rev-parse --short HEAD)
+LATEST_TAG := $(shell git describe --tags --abbrev=0)
+CURRENT_TIMESTAMP := $(shell date +%s)
+
+PHONY: build-container
+build-container:
+	docker buildx build --build-arg="PUBLIC_VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/llocalsearch-frontend:latest --load
+	(cd ./backend/ && docker buildx build . -t nilsherzig/llocalsearch-backend:latest --load)
+
+	(cd ./metrics/ && docker buildx build --build-arg="VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/lsm:latest --load)
+
+PHONY: release-container
+release-container: build-container
+	docker push nilsherzig/llocalsearch-frontend:latest
+	docker push nilsherzig/llocalsearch-backend:latest
+	docker push nilsherzig/lsm:latest
+
+PHONY: new-release
+new-release: release-container
+	@echo "New release pushed to Docker Hub"
 
 PHONY: e2e-backend
 e2e-backend:
@@ -67,3 +86,4 @@ push:
 	docker push $(DOCKER_HUB_USER)/$(FRONTEND_NAME):latest
 	docker push $(DOCKER_HUB_USER)/$(BACKEND_NAME):stable
 	docker push $(DOCKER_HUB_USER)/$(FRONTEND_NAME):stable
+

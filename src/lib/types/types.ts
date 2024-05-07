@@ -16,6 +16,15 @@ export type ChatListItem = {
     title: string;
 }
 
+export type Problem = {
+    title: string
+    msg: string
+}
+
+export type MetricsResponse = {
+    problems: Problem[];
+}
+
 export type ClientSettings = {
     contextSize: number;
     maxIterations: number;
