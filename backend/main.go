@@ -42,11 +42,12 @@ func SetupTutorialChatHistory() {
 		Title:  "LLocalSearch Tutorial",
 		Buffer: memory.NewConversationWindowBuffer(1024 * 8),
 	}
+
 	userQuestion := "How does LLocalSearch work?"
 	newFakeSession.Buffer.ChatHistory.AddUserMessage(context.Background(), userQuestion)
 
 	tutorialMessageOne := `## Welcome to the LLocalSearch tutorial.
-Still working on this haha 👷 
+Still working on this haha 👷
 
 Just ask a question. LLocalSearch will decide how complex the question is and will try to answer it.
 - 🌍 The question is easy and only the search result preview texts are used to answer it

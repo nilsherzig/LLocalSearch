@@ -2,35 +2,17 @@
 
 ## What it is and what it does
 
+LLocalSearch is a wrapper around locally running `Large Language Models` (like ChatGTP, but a lot smaller and less "smart") which allows them to choose from a set of tools. These tools allow them to search the internet for current information about your question. This process is recursive, which means, that the running LLM can freely choose to use tools (even multiple times) based on the information its getting from you and other tool calls. 
+
 [demo.webm](https://github.com/nilsherzig/LLocalSearch/assets/72463901/e13e2531-05a8-40af-8551-965ed9d24eb4)
 
+### Why would I want to use this and not something from `xy`?
 
-LLocalSearch is a wrapper around locally running `Large Language Models` (like ChatGTP, but a lot smaller and less "smart") which allows them to choose from a set of tools. These tools allow them to search the internet for current information about your question. This process is iterative, which means, that the running LLM can freely choose to use tools (even multiple times) based on the information its getting from you and other tool calls. 
+The long term plan, which OpenAI is [selling](https://www.adweek.com/media/openai-preferred-publisher-program-deck/) to big media houses:
 
+> Additionally, members of the program receive priority placement and “richer brand expression” in chat conversations, and their content benefits from more prominent link treatments. 
 
-Here is a rough representation of how this looks like.
-
-```mermaid
-flowchart TB
-	You
-	LLM
-	WebSearch
-	WebScrape
-	Database
-	FinalAnswer
-	
-	You -- asking a question --> LLM
-	LLM --> WebSearch
-	LLM --> WebScrape
-	LLM --> Database
-	LLM -- answer --> FinalAnswer
-
-	WebSearch --> LLM
-	WebScrape --> LLM
-	Database --> LLM
-
-	FinalAnswer -- send to --> You
-```
+If you dislike the idea of getting manipulated by the highest bidder, you might want to try some less discriminatory alternatives, like this project. 
 
 ### Features
 
@@ -40,6 +22,7 @@ flowchart TB
 - 🤔 Supports follow up questions
 - 📱 Mobile friendly design
 - 🌓 Dark and light mode
+
 
 ## Road-map
 
@@ -59,7 +42,7 @@ Inspired by the current layout of [Obsidian](https://obsidian.md)
 Still needs a lot of work, like refactoring a lot of the internal data structures to allow for more better and more flexible ways to expand the functionality in the future without having to rewrite the whole data transmission and interface part again.
 
 
-### Planed (near future)
+### Planned (near future)
 
 #### User Accounts 🙆
 

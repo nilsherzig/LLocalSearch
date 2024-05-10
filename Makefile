@@ -1,25 +1,25 @@
-DOCKER_HUB_USER ?= nilsherzig
-BACKEND_NAME ?= llocalsearch-backend
-FRONTEND_NAME ?= llocalsearch-frontend
-GIT_HASH := $(shell git rev-parse --short HEAD)
+#TODO use this as a version
+GIT_HASH := $(shell git rev-parse --short HEAD) 
+
 LATEST_TAG := $(shell git describe --tags --abbrev=0)
 CURRENT_TIMESTAMP := $(shell date +%s)
 
-PHONY: build-container
-build-container:
+# used for local testing, so i can save the platform build time
+PHONY: build-containers
+build-containers:
+	(cd ./metrics/ && docker buildx build --build-arg="VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/lsm:latest --load)
 	docker buildx build --build-arg="PUBLIC_VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/llocalsearch-frontend:latest --load
 	(cd ./backend/ && docker buildx build . -t nilsherzig/llocalsearch-backend:latest --load)
 
-	(cd ./metrics/ && docker buildx build --build-arg="VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/lsm:latest --load)
-
-PHONY: release-container
-release-container: build-container
-	docker push nilsherzig/llocalsearch-frontend:latest
-	docker push nilsherzig/llocalsearch-backend:latest
-	docker push nilsherzig/lsm:latest
+# containers which will be published
+PHONY: build-containers-multi
+build-containers-multi:
+	(cd ./metrics/ && docker buildx build --build-arg="VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/lsm:latest --push --platform linux/amd64,linux/arm64)
+	docker buildx build --build-arg="PUBLIC_VERSION=$(CURRENT_TIMESTAMP)" . -t nilsherzig/llocalsearch-frontend:latest --push --platform linux/amd64,linux/arm64
+	(cd ./backend/ && docker buildx build . -t nilsherzig/llocalsearch-backend:latest --push --platform linux/amd64,linux/arm64)
 
 PHONY: new-release
-new-release: release-container
+new-release: build-containers-multi 
 	@echo "New release pushed to Docker Hub"
 
 PHONY: e2e-backend
@@ -38,52 +38,3 @@ dev: build-dev
 PHONY: dev-bg
 dev-bg: build-dev
 	docker-compose -f ./docker-compose.dev.yaml up -d
-
-PHONY: dev-bg-stop
-dev-bg-stop: 
-	docker-compose -f ./docker-compose.dev.yaml down
-
-# normal hosting commands
-PHONY: run
-run: 
-	docker-compose up -d
-
-PHONY: stop
-stop: 
-	docker-compose -f ./docker-compose.dev.yaml down 
-
-PHONY: update
-update:  
-	git pull
-
-PHONY: upgrade
-upgrade: stop update run
-
-# release / docker build commands
-release-stable: build-stable tag-git-hash push
-	@echo "Release stable version with git hash $(GIT_HASH)"
-
-release-latest: build-latest tag-git-hash push
-	@echo "Release latest version with git hash $(GIT_HASH)"
-
-build-latest:
-	docker build -t $(DOCKER_HUB_USER)/$(FRONTEND_NAME):latest .
-	(cd ./backend && docker build -t $(DOCKER_HUB_USER)/$(BACKEND_NAME):latest .)
-
-build-stable:
-	docker build -t $(DOCKER_HUB_USER)/$(FRONTEND_NAME):stable .
-	(cd ./backend && docker build -t $(DOCKER_HUB_USER)/$(BACKEND_NAME):stable .)
-
-tag-git-hash:
-	docker tag $(DOCKER_HUB_USER)/$(BACKEND_NAME):latest $(DOCKER_HUB_USER)/$(BACKEND_NAME):$(GIT_HASH)
-	docker tag $(DOCKER_HUB_USER)/$(FRONTEND_NAME):latest $(DOCKER_HUB_USER)/$(FRONTEND_NAME):$(GIT_HASH)
-
-push:
-	@echo "Pushing images to Docker Hub"
-	# docker push $(DOCKER_HUB_USER)$/$(BACKEND_NAME):$(GIT_HASH)
-	# docker push $(DOCKER_HUB_USER)$/$(FRONTEND_NAME):$(GIT_HASH)
-	docker push $(DOCKER_HUB_USER)/$(BACKEND_NAME):latest
-	docker push $(DOCKER_HUB_USER)/$(FRONTEND_NAME):latest
-	docker push $(DOCKER_HUB_USER)/$(BACKEND_NAME):stable
-	docker push $(DOCKER_HUB_USER)/$(FRONTEND_NAME):stable
-
