@@ -1,3 +1,6 @@
+> [!WARNING]  
+> This version has not been under development for over a year. Im working on a rewrite / relaunch within a private beta - to gather feedback without wasting everyones time by publishing incomplete software. Please contact me if youre interested to join.
+
 # LLocalSearch
 
 ## What it is and what it does
