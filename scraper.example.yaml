@@ -10,7 +10,7 @@ embeddings:
   # model: nomic-embed-text-v2-moe
   # dimensions: 256
   timeout: 30s
-  batch_size: 4
+  batch_size: 8
   page_token_limit: 3000
 summary_llm:
   model: qwen3.5:9b

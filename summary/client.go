@@ -19,6 +19,25 @@ type Result struct {
 	Similarity float64
 }
 
+type Response struct {
+	Text  string
+	Stats Stats
+}
+
+type Stats struct {
+	PromptEvalCount int
+	EvalCount       int
+	EvalDuration    time.Duration
+	TotalDuration   time.Duration
+}
+
+func (s Stats) TokensPerSecond() float64 {
+	if s.EvalCount <= 0 || s.EvalDuration <= 0 {
+		return 0
+	}
+	return float64(s.EvalCount) / s.EvalDuration.Seconds()
+}
+
 type Config struct {
 	BaseURL string
 	Model   string
@@ -26,7 +45,7 @@ type Config struct {
 }
 
 type Client interface {
-	Summarize(ctx context.Context, query string, results []Result) (string, error)
+	Summarize(ctx context.Context, query string, results []Result) (Response, error)
 }
 
 type HTTPClient struct {
@@ -42,7 +61,11 @@ type generateRequest struct {
 }
 
 type generateResponse struct {
-	Response string `json:"response"`
+	Response        string `json:"response"`
+	TotalDuration   int64  `json:"total_duration"`
+	PromptEvalCount int    `json:"prompt_eval_count"`
+	EvalCount       int    `json:"eval_count"`
+	EvalDuration    int64  `json:"eval_duration"`
 }
 
 func NewClient(cfg Config, httpClient *http.Client) *HTTPClient {
@@ -61,9 +84,9 @@ func NewClient(cfg Config, httpClient *http.Client) *HTTPClient {
 	}
 }
 
-func (c *HTTPClient) Summarize(ctx context.Context, query string, results []Result) (string, error) {
+func (c *HTTPClient) Summarize(ctx context.Context, query string, results []Result) (Response, error) {
 	if strings.TrimSpace(query) == "" || len(results) == 0 {
-		return "", nil
+		return Response{}, nil
 	}
 
 	payload, err := json.Marshal(generateRequest{
@@ -72,31 +95,39 @@ func (c *HTTPClient) Summarize(ctx context.Context, query string, results []Resu
 		Stream: false,
 	})
 	if err != nil {
-		return "", fmt.Errorf("marshal summary request: %w", err)
+		return Response{}, fmt.Errorf("marshal summary request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/generate", bytes.NewReader(payload))
 	if err != nil {
-		return "", fmt.Errorf("build summary request: %w", err)
+		return Response{}, fmt.Errorf("build summary request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("execute summary request: %w", err)
+		return Response{}, fmt.Errorf("execute summary request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("summary request failed with status %d", resp.StatusCode)
+		return Response{}, fmt.Errorf("summary request failed with status %d", resp.StatusCode)
 	}
 
 	var body generateResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "", fmt.Errorf("decode summary response: %w", err)
+		return Response{}, fmt.Errorf("decode summary response: %w", err)
 	}
 
-	return strings.TrimSpace(body.Response), nil
+	return Response{
+		Text: strings.TrimSpace(body.Response),
+		Stats: Stats{
+			PromptEvalCount: body.PromptEvalCount,
+			EvalCount:       body.EvalCount,
+			EvalDuration:    time.Duration(body.EvalDuration),
+			TotalDuration:   time.Duration(body.TotalDuration),
+		},
+	}, nil
 }
 
 func buildPrompt(query string, results []Result) string {

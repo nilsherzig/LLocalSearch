@@ -199,7 +199,15 @@ func TestSearchHandlerFindsFuzzyMatchesAcrossDownloadedPages(t *testing.T) {
 func TestSearchHandlerRendersSummaryForWebResults(t *testing.T) {
 	server, dbPath := newTestServer(t, testServerOptions{
 		summarizer: testSummarizer{
-			summary: "The results focus on Kubernetes guidance from the scraped pages.",
+			response: summary.Response{
+				Text: "The results focus on Kubernetes guidance from the scraped pages.",
+				Stats: summary.Stats{
+					PromptEvalCount: 42,
+					EvalCount:       18,
+					EvalDuration:    1500 * time.Millisecond,
+					TotalDuration:   2 * time.Second,
+				},
+			},
 		},
 	})
 	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
@@ -228,10 +236,16 @@ func TestSearchHandlerRendersSummaryForWebResults(t *testing.T) {
 	if !strings.Contains(body, "The results focus on Kubernetes guidance from the scraped pages.") {
 		t.Fatalf("expected summary text, got %q", body)
 	}
+	if !strings.Contains(body, "12.0 tok/s") {
+		t.Fatalf("expected tokens per second below summary, got %q", body)
+	}
+	if !strings.Contains(body, "18 output tok") {
+		t.Fatalf("expected output token count below summary, got %q", body)
+	}
 }
 
 func TestSearchHandlerPassesPlainContentContextToSummarizer(t *testing.T) {
-	capturing := &capturingSummarizer{summary: "summary"}
+	capturing := &capturingSummarizer{response: summary.Response{Text: "summary"}}
 	server, dbPath := newTestServer(t, testServerOptions{
 		summarizer: capturing,
 	})
@@ -263,7 +277,9 @@ func TestSearchHandlerPassesPlainContentContextToSummarizer(t *testing.T) {
 func TestSearchAPIHandlerReturnsJSONResults(t *testing.T) {
 	server, dbPath := newTestServer(t, testServerOptions{
 		summarizer: testSummarizer{
-			summary: "The API response must not include this summary.",
+			response: summary.Response{
+				Text: "The API response must not include this summary.",
+			},
 		},
 	})
 	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
@@ -515,12 +531,12 @@ type testEmbedder struct {
 }
 
 type testSummarizer struct {
-	summary string
-	err     error
+	response summary.Response
+	err      error
 }
 
 type capturingSummarizer struct {
-	summary    string
+	response   summary.Response
 	gotResults []summary.Result
 }
 
@@ -541,19 +557,19 @@ func (t testEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, er
 	return result, nil
 }
 
-func (t testSummarizer) Summarize(_ context.Context, query string, results []summary.Result) (string, error) {
+func (t testSummarizer) Summarize(_ context.Context, query string, results []summary.Result) (summary.Response, error) {
 	if t.err != nil {
-		return "", t.err
+		return summary.Response{}, t.err
 	}
 	if strings.TrimSpace(query) == "" || len(results) == 0 {
-		return "", nil
+		return summary.Response{}, nil
 	}
-	return t.summary, nil
+	return t.response, nil
 }
 
-func (c *capturingSummarizer) Summarize(_ context.Context, query string, results []summary.Result) (string, error) {
+func (c *capturingSummarizer) Summarize(_ context.Context, query string, results []summary.Result) (summary.Response, error) {
 	c.gotResults = append([]summary.Result(nil), results...)
-	return c.summary, nil
+	return c.response, nil
 }
 
 func vectorWithLead(values ...float32) []float32 {

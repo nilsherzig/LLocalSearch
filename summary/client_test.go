@@ -22,7 +22,7 @@ func TestClientSummarizeSendsConfiguredModelAndSearchContext(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"response":"  Concise result summary.  "}`))
+		_, _ = w.Write([]byte(`{"response":"  Concise result summary.  ","total_duration":2000000000,"prompt_eval_count":12,"eval_count":24,"eval_duration":2000000000}`))
 	}))
 	defer server.Close()
 
@@ -32,7 +32,7 @@ func TestClientSummarizeSendsConfiguredModelAndSearchContext(t *testing.T) {
 		Timeout: time.Second,
 	}, server.Client())
 
-	text, err := client.Summarize(context.Background(), "kubernetes guide", []Result{
+	response, err := client.Summarize(context.Background(), "kubernetes guide", []Result{
 		{
 			URL:        "https://example.com/article",
 			Host:       "example.com",
@@ -67,8 +67,20 @@ func TestClientSummarizeSendsConfiguredModelAndSearchContext(t *testing.T) {
 	if !strings.Contains(gotRequest.Prompt, "more detailed plain text context") {
 		t.Fatalf("expected content context in prompt, got %q", gotRequest.Prompt)
 	}
-	if text != "Concise result summary." {
-		t.Fatalf("unexpected summary text %q", text)
+	if response.Text != "Concise result summary." {
+		t.Fatalf("unexpected summary text %q", response.Text)
+	}
+	if response.Stats.PromptEvalCount != 12 {
+		t.Fatalf("unexpected prompt eval count %d", response.Stats.PromptEvalCount)
+	}
+	if response.Stats.EvalCount != 24 {
+		t.Fatalf("unexpected eval count %d", response.Stats.EvalCount)
+	}
+	if response.Stats.TotalDuration != 2*time.Second {
+		t.Fatalf("unexpected total duration %v", response.Stats.TotalDuration)
+	}
+	if response.Stats.TokensPerSecond() != 12 {
+		t.Fatalf("unexpected tokens per second %v", response.Stats.TokensPerSecond())
 	}
 }
 

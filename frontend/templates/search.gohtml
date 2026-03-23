@@ -93,6 +93,9 @@
           <article class="result">
             <h2>Summary</h2>
             <p>{{.Summary}}</p>
+            {{if .SummaryStats}}
+            <p class="muted">{{.SummaryStats}}</p>
+            {{end}}
           </article>
           {{end}}
           {{range .Results}}

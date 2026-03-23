@@ -77,9 +77,10 @@ type searchResult struct {
 }
 
 type searchData struct {
-	Query   string
-	Summary string
-	Results []searchResult
+	Query        string
+	Summary      string
+	SummaryStats string
+	Results      []searchResult
 }
 
 type searchAPIResponse struct {
@@ -424,14 +425,15 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logger.Info("serve search", "query", query, "results", len(results))
-	summaryText, err := s.summarizeSearch(query, results)
+	summaryResponse, err := s.summarizeSearch(query, results)
 	if err != nil {
 		s.logger.Error("summarize search failed", "query", query, "err", err)
 	}
 	if err := s.templates.ExecuteTemplate(w, "search.gohtml", searchData{
-		Query:   query,
-		Summary: summaryText,
-		Results: results,
+		Query:        query,
+		Summary:      summaryResponse.Text,
+		SummaryStats: formatSummaryStats(summaryResponse.Stats),
+		Results:      results,
 	}); err != nil {
 		s.logger.Error("render search failed", "query", query, "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -512,7 +514,7 @@ func (s *Server) searchPages(query string) ([]searchResult, error) {
 		return nil, fmt.Errorf("embed query returned %d vectors", len(vectors))
 	}
 
-	matches, err := vectorstore.Search(s.db, vectors[0], 20)
+	matches, err := vectorstore.Search(s.db, vectors[0], 10)
 	if err != nil {
 		return nil, err
 	}
@@ -552,9 +554,9 @@ func (s *Server) searchPages(query string) ([]searchResult, error) {
 	return results, nil
 }
 
-func (s *Server) summarizeSearch(query string, results []searchResult) (string, error) {
+func (s *Server) summarizeSearch(query string, results []searchResult) (summary.Response, error) {
 	if s.summarizer == nil || strings.TrimSpace(query) == "" || len(results) == 0 {
-		return "", nil
+		return summary.Response{}, nil
 	}
 
 	summaryResults := make([]summary.Result, 0, len(results))
@@ -570,6 +572,23 @@ func (s *Server) summarizeSearch(query string, results []searchResult) (string, 
 	}
 
 	return s.summarizer.Summarize(context.Background(), query, summaryResults)
+}
+
+func formatSummaryStats(stats summary.Stats) string {
+	parts := make([]string, 0, 4)
+	if tokensPerSecond := stats.TokensPerSecond(); tokensPerSecond > 0 {
+		parts = append(parts, fmt.Sprintf("%.1f tok/s", tokensPerSecond))
+	}
+	if stats.EvalCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d output tok", stats.EvalCount))
+	}
+	if stats.PromptEvalCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d prompt tok", stats.PromptEvalCount))
+	}
+	if stats.TotalDuration > 0 {
+		parts = append(parts, stats.TotalDuration.Round(100*time.Millisecond).String())
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (s *Server) loadPageByPathID(path string, prefix string) (scraper.SavedPage, bool, error) {
