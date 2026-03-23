@@ -57,6 +57,7 @@ type Scraper struct {
 	now       func() time.Time
 	hostDelay time.Duration
 	db        *gorm.DB
+	saveMu    sync.Mutex
 }
 
 type SavedPage struct {
@@ -396,6 +397,9 @@ func (s *Scraper) saveReadablePage(pageURL string, body []byte, scrapeTime time.
 }
 
 func (s *Scraper) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) (SavedPage, error) {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	contentHash := hashContent(content)
 
 	page := SavedPage{
@@ -409,23 +413,40 @@ func (s *Scraper) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, conte
 		ScrapedAt:   scrapeTime,
 	}
 
-	if err := s.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "url"}, {Name: "content_hash"}},
-		DoNothing: true,
-	}).Create(&page).Error; err != nil {
-		return SavedPage{}, fmt.Errorf("insert page: %w", err)
+	var saved SavedPage
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("url = ? AND content_hash = ?", page.URL, page.ContentHash).Limit(1).Find(&saved)
+		if result.Error != nil {
+			return fmt.Errorf("load existing page: %w", result.Error)
+		}
+		if result.RowsAffected > 0 {
+			return nil
+		}
+
+		if err := tx.Where("url = ?", page.URL).Delete(&SavedPage{}).Error; err != nil {
+			return fmt.Errorf("delete old page versions: %w", err)
+		}
+
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "url"}, {Name: "content_hash"}},
+			DoNothing: true,
+		}).Create(&page).Error; err != nil {
+			return fmt.Errorf("insert page: %w", err)
+		}
+		if page.ID != 0 {
+			saved = page
+			return nil
+		}
+
+		if err := tx.Where("url = ? AND content_hash = ?", page.URL, page.ContentHash).First(&saved).Error; err != nil {
+			return fmt.Errorf("load inserted page: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return SavedPage{}, err
 	}
 
-	if page.ID != 0 {
-		return page, nil
-	}
-
-	var existing SavedPage
-	if err := s.db.Where("url = ? AND content_hash = ?", page.URL, page.ContentHash).First(&existing).Error; err != nil {
-		return SavedPage{}, fmt.Errorf("load existing page: %w", err)
-	}
-
-	return existing, nil
+	return saved, nil
 }
 
 func isHTMLStackLimitError(err error) bool {

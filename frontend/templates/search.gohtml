@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Search</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3efe7;
+      --panel: #fffdf9;
+      --text: #1d1d1b;
+      --muted: #736f68;
+      --accent: #1c6e5b;
+      --border: #ded6ca;
+    }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: linear-gradient(180deg, #efe7da 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 36px 20px 72px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(29, 29, 27, 0.06);
+    }
+    .panel + .panel {
+      margin-top: 20px;
+    }
+    form {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    input[type="search"] {
+      flex: 1 1 280px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font: inherit;
+    }
+    button {
+      padding: 12px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fffdf9;
+      font: inherit;
+      cursor: pointer;
+    }
+    a {
+      color: var(--accent);
+    }
+    .result + .result {
+      border-top: 1px solid var(--border);
+      margin-top: 18px;
+      padding-top: 18px;
+    }
+    .muted {
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <p><a href="/">Dashboard</a> · <a href="/pages">All pages</a></p>
+      <h1>Search downloaded pages</h1>
+      <form action="/search" method="get">
+        <input id="q" name="q" type="search" value="{{.Query}}" placeholder="Search content, URLs, hosts...">
+        <button type="submit">Search</button>
+      </form>
+      {{if .Query}}
+      <p class="muted">Results for "{{.Query}}"</p>
+      {{else}}
+      <p class="muted">Enter a query to search through the scraped pages.</p>
+      {{end}}
+    </section>
+
+    <section class="panel">
+      {{if .Query}}
+        {{if .Results}}
+          {{range .Results}}
+          <article class="result">
+            <h2><a href="/pages/{{.Page.ID}}">{{.Page.URL}}</a></h2>
+            <p class="muted">{{.Page.Host}}{{.Page.Path}} · scraped {{.Page.ScrapedAt.Format "2006-01-02 15:04:05 MST"}}</p>
+            <p>{{.Excerpt}}</p>
+          </article>
+          {{end}}
+        {{else}}
+        <p>No matches found.</p>
+        {{end}}
+      {{else}}
+      <p>No query yet.</p>
+      {{end}}
+    </section>
+  </main>
+</body>
+</html>

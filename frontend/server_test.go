@@ -47,6 +47,9 @@ func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
 	if !strings.Contains(body, "https://news.example.org/start") || !strings.Contains(body, "1 scraped pages") {
 		t.Fatalf("expected whitelist seed summary for news.example.org/start, got %q", body)
 	}
+	if !strings.Contains(body, `action="/search"`) {
+		t.Fatalf("expected search form on dashboard, got %q", body)
+	}
 }
 
 func TestPagesHandlerListsScrapedPages(t *testing.T) {
@@ -101,6 +104,30 @@ func TestPageDetailHandlerReturnsNotFoundForUnknownPage(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status %d", rec.Code)
+	}
+}
+
+func TestSearchHandlerFindsFuzzyMatchesAcrossDownloadedPages(t *testing.T) {
+	server := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=artcle", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `Results for "artcle"`) {
+		t.Fatalf("expected search heading, got %q", body)
+	}
+	if !strings.Contains(body, "https://example.com/article") {
+		t.Fatalf("expected fuzzy search to find article page, got %q", body)
+	}
+	if !strings.Contains(body, "clean article body") {
+		t.Fatalf("expected search snippet to include matched content, got %q", body)
 	}
 }
 

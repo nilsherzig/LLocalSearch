@@ -501,6 +501,59 @@ func TestFetchDoesNotSaveSameURLAndHashAgainWithDifferentTimestamp(t *testing.T)
 	}
 }
 
+func TestSavePageRecordReplacesOlderSavedVersionWhenContentHashChanges(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pageURL, err := url.Parse("https://example.com/article")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	firstTime := time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC)
+	firstPage, err := s.savePageRecord(pageURL, firstTime, "<article><p>old version</p></article>", "readability")
+	if err != nil {
+		t.Fatalf("first savePageRecord returned error: %v", err)
+	}
+
+	secondTime := firstTime.Add(2 * time.Hour)
+	secondPage, err := s.savePageRecord(pageURL, secondTime, "<article><p>new version</p></article>", "readability")
+	if err != nil {
+		t.Fatalf("second savePageRecord returned error: %v", err)
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(dbPages) != 1 {
+		t.Fatalf("expected one page in db after replacement, got %d", len(dbPages))
+	}
+	if dbPages[0].ID != secondPage.ID {
+		t.Fatalf("expected latest page id %d, got %d", secondPage.ID, dbPages[0].ID)
+	}
+	if dbPages[0].ID == firstPage.ID {
+		t.Fatalf("expected old page id %d to be replaced", firstPage.ID)
+	}
+	if !strings.Contains(dbPages[0].Content, "new version") {
+		t.Fatalf("expected replacement content in db, got %q", dbPages[0].Content)
+	}
+	if dbPages[0].ContentHash == firstPage.ContentHash {
+		t.Fatalf("expected content hash to change after replacement")
+	}
+	if !dbPages[0].ScrapedAt.Equal(secondTime) {
+		t.Fatalf("expected latest scraped time %v, got %v", secondTime, dbPages[0].ScrapedAt)
+	}
+}
+
 func TestFetchFollowsURLs(t *testing.T) {
 	tempDir := t.TempDir()
 	cacheDir := filepath.Join(tempDir, "cache")

@@ -67,6 +67,13 @@
       <h1>{{.TotalPages}} scraped pages</h1>
       <p class="metric">{{.TotalPages}}</p>
       <p class="muted">Latest scrape: {{.LatestScraped}}</p>
+      <form action="/search" method="get">
+        <label for="q">Search downloaded pages</label>
+        <div style="display:flex; gap:12px; margin-top:10px; flex-wrap:wrap;">
+          <input id="q" name="q" type="search" placeholder="Search content, URLs, hosts..." style="flex:1 1 280px; padding:12px 14px; border-radius:12px; border:1px solid var(--border); font:inherit;">
+          <button type="submit" style="padding:12px 18px; border-radius:12px; border:1px solid var(--accent); background:var(--accent); color:#fffdf9; font:inherit; cursor:pointer;">Search</button>
+        </div>
+      </form>
       <p><a href="/pages">Browse all scraped pages</a></p>
     </section>
     <section class="panel">

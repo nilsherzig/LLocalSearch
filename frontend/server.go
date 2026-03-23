@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nilsherzig/llocalsearch/scraper"
+	"golang.org/x/net/html"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -56,6 +57,16 @@ type pageDetailData struct {
 	Content template.HTML
 }
 
+type searchResult struct {
+	Page    scraper.SavedPage
+	Excerpt string
+}
+
+type searchData struct {
+	Query   string
+	Results []searchResult
+}
+
 func NewServer(cfg Config) (*Server, error) {
 	if cfg.DBPath == "" {
 		return nil, fmt.Errorf("db path is required")
@@ -85,6 +96,7 @@ func NewServer(cfg Config) (*Server, error) {
 		filepath.Join(cfg.TemplatesDir, "index.gohtml"),
 		filepath.Join(cfg.TemplatesDir, "pages.gohtml"),
 		filepath.Join(cfg.TemplatesDir, "page.gohtml"),
+		filepath.Join(cfg.TemplatesDir, "search.gohtml"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
@@ -101,6 +113,7 @@ func NewServer(cfg Config) (*Server, error) {
 	server.mux.HandleFunc("/", server.handleDashboard)
 	server.mux.HandleFunc("/pages", server.handlePages)
 	server.mux.HandleFunc("/pages/", server.handlePageDetail)
+	server.mux.HandleFunc("/search", server.handleSearch)
 
 	return server, nil
 }
@@ -265,4 +278,318 @@ func (s *Server) handlePageDetail(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("render page detail failed", "id", page.ID, "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
+}
+
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/search" {
+		http.NotFound(w, r)
+		return
+	}
+
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	results, err := s.searchPages(query)
+	if err != nil {
+		s.logger.Error("search pages failed", "query", query, "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	s.logger.Info("serve search", "query", query, "results", len(results))
+	if err := s.templates.ExecuteTemplate(w, "search.gohtml", searchData{
+		Query:   query,
+		Results: results,
+	}); err != nil {
+		s.logger.Error("render search failed", "query", query, "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) searchPages(query string) ([]searchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+
+	var pages []scraper.SavedPage
+	if err := s.db.Order("scraped_at desc").Find(&pages).Error; err != nil {
+		return nil, err
+	}
+
+	type scoredResult struct {
+		searchResult
+		score int
+	}
+
+	scored := make([]scoredResult, 0, len(pages))
+	for _, page := range pages {
+		plainContent := extractPlainText(page.Content)
+		score := scorePageSearch(query, page, plainContent)
+		if score <= 0 {
+			continue
+		}
+
+		scored = append(scored, scoredResult{
+			searchResult: searchResult{
+				Page:    page,
+				Excerpt: buildExcerpt(plainContent, query),
+			},
+			score: score,
+		})
+	}
+
+	slices.SortFunc(scored, func(a, b scoredResult) int {
+		if a.score != b.score {
+			return b.score - a.score
+		}
+		if !a.Page.ScrapedAt.Equal(b.Page.ScrapedAt) {
+			if a.Page.ScrapedAt.After(b.Page.ScrapedAt) {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.Page.URL, b.Page.URL)
+	})
+
+	if len(scored) > 25 {
+		scored = scored[:25]
+	}
+
+	results := make([]searchResult, 0, len(scored))
+	for _, item := range scored {
+		results = append(results, item.searchResult)
+	}
+
+	return results, nil
+}
+
+func scorePageSearch(query string, page scraper.SavedPage, plainContent string) int {
+	queryTerms := tokenizeSearchText(query)
+	if len(queryTerms) == 0 {
+		return 0
+	}
+
+	fieldWeights := []struct {
+		text   string
+		weight int
+	}{
+		{text: page.URL, weight: 7},
+		{text: page.Host, weight: 6},
+		{text: page.Path, weight: 5},
+		{text: plainContent, weight: 3},
+	}
+
+	total := 0
+	for _, term := range queryTerms {
+		termBest := 0
+		for _, field := range fieldWeights {
+			score := scoreField(term, field.text) * field.weight
+			if score > termBest {
+				termBest = score
+			}
+		}
+		if termBest == 0 {
+			return 0
+		}
+		total += termBest
+	}
+
+	return total
+}
+
+func scoreField(query string, text string) int {
+	normalizedText := normalizeSearchText(text)
+	if normalizedText == "" {
+		return 0
+	}
+	if idx := strings.Index(normalizedText, query); idx >= 0 {
+		return 1000 - min(idx, 300)
+	}
+
+	best := 0
+	for _, token := range strings.Fields(normalizedText) {
+		if token == query {
+			return 950
+		}
+		if strings.HasPrefix(token, query) {
+			best = max(best, 900-len(token)+len(query))
+		}
+		if score := fuzzyTokenScore(query, token); score > best {
+			best = score
+		}
+	}
+
+	return best
+}
+
+func fuzzyTokenScore(query string, token string) int {
+	if token == "" {
+		return 0
+	}
+
+	dist := levenshteinDistance(query, token)
+	maxDistance := max(1, len(query)/3)
+	if dist <= maxDistance {
+		return 760 - dist*120 - abs(len(token)-len(query))*15
+	}
+
+	if matched, gaps := subsequenceGapScore(query, token); matched {
+		return 520 - gaps*10 - abs(len(token)-len(query))*5
+	}
+
+	return 0
+}
+
+func buildExcerpt(text string, query string) string {
+	normalizedText := strings.TrimSpace(strings.Join(strings.Fields(text), " "))
+	if normalizedText == "" {
+		return "No text excerpt available."
+	}
+
+	if len(normalizedText) <= 220 {
+		return normalizedText
+	}
+
+	normalizedQuery := normalizeSearchText(query)
+	if normalizedQuery != "" {
+		lowerText := strings.ToLower(normalizedText)
+		if idx := strings.Index(lowerText, normalizedQuery); idx >= 0 {
+			start := max(0, idx-60)
+			end := min(len(normalizedText), idx+len(normalizedQuery)+120)
+			excerpt := normalizedText[start:end]
+			if start > 0 {
+				excerpt = "..." + excerpt
+			}
+			if end < len(normalizedText) {
+				excerpt += "..."
+			}
+			return excerpt
+		}
+	}
+
+	return normalizedText[:220] + "..."
+}
+
+func extractPlainText(content string) string {
+	tokenizer := html.NewTokenizer(strings.NewReader(content))
+	var builder strings.Builder
+	for {
+		switch tokenizer.Next() {
+		case html.ErrorToken:
+			return strings.TrimSpace(strings.Join(strings.Fields(builder.String()), " "))
+		case html.TextToken:
+			text := strings.TrimSpace(string(tokenizer.Text()))
+			if text == "" {
+				continue
+			}
+			if builder.Len() > 0 {
+				builder.WriteByte(' ')
+			}
+			builder.WriteString(text)
+		}
+	}
+}
+
+func tokenizeSearchText(input string) []string {
+	normalized := normalizeSearchText(input)
+	if normalized == "" {
+		return nil
+	}
+	return strings.Fields(normalized)
+}
+
+func normalizeSearchText(input string) string {
+	var builder strings.Builder
+	builder.Grow(len(input))
+	lastSpace := true
+	for _, r := range strings.ToLower(input) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			builder.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if !lastSpace {
+			builder.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+
+	return strings.TrimSpace(builder.String())
+}
+
+func levenshteinDistance(a string, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return len(b)
+	}
+	if b == "" {
+		return len(a)
+	}
+
+	prev := make([]int, len(b)+1)
+	for j := 0; j <= len(b); j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(a); i++ {
+		curr := make([]int, len(b)+1)
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			curr[j] = min(
+				min(curr[j-1]+1, prev[j]+1),
+				prev[j-1]+cost,
+			)
+		}
+		prev = curr
+	}
+
+	return prev[len(b)]
+}
+
+func subsequenceGapScore(query string, token string) (bool, int) {
+	if len(query) == 0 {
+		return false, 0
+	}
+
+	queryIndex := 0
+	lastMatch := -1
+	gaps := 0
+	for i := 0; i < len(token) && queryIndex < len(query); i++ {
+		if token[i] != query[queryIndex] {
+			continue
+		}
+		if lastMatch >= 0 {
+			gaps += i - lastMatch - 1
+		}
+		lastMatch = i
+		queryIndex++
+	}
+
+	return queryIndex == len(query), gaps
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
