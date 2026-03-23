@@ -305,11 +305,11 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 	var mu sync.Mutex
 
 	collector.OnRequest(func(r *colly.Request) {
-		s.logger.Info("requesting url", "url", r.URL.String())
+		// s.logger.Info("requesting url", "url", r.URL.String())
 	})
 
 	collector.OnResponse(func(r *colly.Response) {
-		s.logger.Info("received response", "url", r.Request.URL.String(), "status", r.StatusCode, "bytes", len(r.Body))
+		// s.logger.Info("received response", "url", r.Request.URL.String(), "status", r.StatusCode, "bytes", len(r.Body))
 		if !isHTMLResponse(r.Headers.Get("Content-Type"), r.Body) {
 			s.logger.Info("skipping non-html response", "url", r.Request.URL.String(), "content_type", normalizedContentType(r.Headers.Get("Content-Type"), r.Body))
 			return
@@ -338,7 +338,7 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 		savedByURL[saveResult.Page.URL] = saveResult.Page
 		savedPages = append(savedPages, saveResult.Page)
 		mu.Unlock()
-		s.logger.Info("saved page", "url", saveResult.Page.URL, "page_key", saveResult.Page.PageKey, "id", saveResult.Page.ID)
+		// s.logger.Info("saved page", "url", saveResult.Page.URL, "page_key", saveResult.Page.PageKey, "id", saveResult.Page.ID)
 		if s.observer != nil {
 			s.observer.OnPageSaved(SessionPageEvent{
 				Page:              saveResult.Page,
