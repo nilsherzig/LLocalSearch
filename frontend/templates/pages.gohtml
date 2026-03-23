@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scraped Pages</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: #f7f3ec;
+      color: #1d1d1b;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 36px 20px 72px;
+    }
+    .panel {
+      background: #fffdf9;
+      border: 1px solid #ded6ca;
+      border-radius: 18px;
+      padding: 24px;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    li + li {
+      margin-top: 12px;
+    }
+    a {
+      color: #1c6e5b;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="panel">
+      <h1>Scraped pages</h1>
+      <p><a href="/">Back to dashboard</a></p>
+      <ul>
+        {{range .Pages}}
+        <li>
+          <a href="/pages/{{.ID}}">{{.Host}}{{.Path}}</a>
+          <div>{{.URL}}</div>
+        </li>
+        {{else}}
+        <li>No pages scraped yet.</li>
+        {{end}}
+      </ul>
+    </div>
+  </main>
+</body>
+</html>
+

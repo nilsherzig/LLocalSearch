@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLocalSearch Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f0e8;
+      --panel: #fffdf9;
+      --text: #1d1d1b;
+      --muted: #736f68;
+      --accent: #1c6e5b;
+      --border: #ded6ca;
+    }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: linear-gradient(180deg, #efe7da 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+    .hero, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(29, 29, 27, 0.06);
+    }
+    .hero {
+      margin-bottom: 24px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .metric {
+      font-size: 2.6rem;
+      margin: 12px 0 4px;
+      color: var(--accent);
+    }
+    .muted {
+      color: var(--muted);
+    }
+    ul {
+      padding-left: 20px;
+    }
+    li + li {
+      margin-top: 8px;
+    }
+    a {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="muted">LLocalSearch</p>
+      <h1>{{.TotalPages}} scraped pages</h1>
+      <p class="metric">{{.TotalPages}}</p>
+      <p class="muted">Latest scrape: {{.LatestScraped}}</p>
+      <p><a href="/pages">Browse all scraped pages</a></p>
+    </section>
+    <section class="panel">
+      <h2>Recent pages</h2>
+      <ul>
+        {{range .RecentPages}}
+        <li><a href="/pages/{{.ID}}">{{.URL}}</a></li>
+        {{else}}
+        <li>No pages scraped yet.</li>
+        {{end}}
+      </ul>
+    </section>
+    <div class="grid">
+      <section class="panel">
+        <h2>Pages per host</h2>
+        <ul>
+          {{range .PagesPerHost}}
+          <li><strong>{{.Label}}</strong>: {{.Count}} pages</li>
+          {{else}}
+          <li>No host data yet.</li>
+          {{end}}
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Pages per whitelist target</h2>
+        <ul>
+          {{range .PagesPerWhitelist}}
+          <li><strong>{{.Label}}</strong>: {{.Count}} scraped pages</li>
+          {{else}}
+          <li>No whitelist targets configured.</li>
+          {{end}}
+        </ul>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

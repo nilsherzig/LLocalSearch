@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Page.URL}}</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: #fcfaf5;
+      color: #1d1d1b;
+    }
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 36px 20px 72px;
+    }
+    .meta, .content {
+      background: #fffdf9;
+      border: 1px solid #ded6ca;
+      border-radius: 18px;
+      padding: 24px;
+    }
+    .meta {
+      margin-bottom: 20px;
+    }
+    a {
+      color: #1c6e5b;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="meta">
+      <p><a href="/">Dashboard</a> · <a href="/pages">All pages</a></p>
+      <h1>{{.Page.URL}}</h1>
+      <p>Scraped at {{.Page.ScrapedAt.Format "2006-01-02 15:04:05 MST"}}</p>
+    </section>
+    <section class="content">
+      {{.Content}}
+    </section>
+  </main>
+</body>
+</html>
