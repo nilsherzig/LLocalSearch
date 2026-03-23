@@ -18,6 +18,7 @@ import (
 
 	"github.com/nilsherzig/llocalsearch/embedding"
 	"github.com/nilsherzig/llocalsearch/scraper"
+	"github.com/nilsherzig/llocalsearch/summary"
 	"github.com/nilsherzig/llocalsearch/vectorstore"
 	"golang.org/x/net/html"
 	"gorm.io/gorm"
@@ -27,7 +28,9 @@ type Config struct {
 	DBPath         string
 	TemplatesDir   string
 	Embeddings     scraper.EmbeddingConfig
+	SummaryLLM     scraper.SummaryLLMConfig
 	Embedder       embedding.Client
+	Summarizer     summary.Client
 	WhitelistPages []string
 	Logger         *slog.Logger
 }
@@ -35,6 +38,7 @@ type Config struct {
 type Server struct {
 	db             *gorm.DB
 	embedder       embedding.Client
+	summarizer     summary.Client
 	logger         *slog.Logger
 	templates      *template.Template
 	mux            *http.ServeMux
@@ -42,8 +46,9 @@ type Server struct {
 }
 
 type countSummary struct {
-	Label string
-	Count int
+	Label         string
+	ScrapedCount  int
+	EmbeddedCount int
 }
 
 type dashboardData struct {
@@ -73,6 +78,7 @@ type searchResult struct {
 
 type searchData struct {
 	Query   string
+	Summary string
 	Results []searchResult
 }
 
@@ -152,9 +158,19 @@ func NewServer(cfg Config) (*Server, error) {
 		}, nil)
 	}
 
+	summarizer := cfg.Summarizer
+	if summarizer == nil && cfg.Embeddings.BaseURL != "" && cfg.SummaryLLM.Model != "" {
+		summarizer = summary.NewClient(summary.Config{
+			BaseURL: cfg.Embeddings.BaseURL,
+			Model:   cfg.SummaryLLM.Model,
+			Timeout: time.Duration(cfg.SummaryLLM.Timeout),
+		}, nil)
+	}
+
 	server := &Server{
 		db:             db,
 		embedder:       embedder,
+		summarizer:     summarizer,
 		logger:         logger,
 		templates:      templates,
 		mux:            http.NewServeMux(),
@@ -200,6 +216,12 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	embeddedPageIDs, err := s.embeddedPageIDs()
+	if err != nil {
+		s.logger.Error("load embedded page ids failed", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	var allPages []scraper.SavedPage
 	if err := s.db.Find(&allPages).Error; err != nil {
 		s.logger.Error("load pages for dashboard failed", "err", err)
@@ -218,8 +240,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		EmbeddingProgress: embeddingProgressPercent(total, embeddedPages),
 		LatestScraped:     latestScraped,
 		RecentPages:       recentPages,
-		PagesPerHost:      summarizePagesPerHost(allPages),
-		PagesPerWhitelist: summarizePagesPerWhitelist(allPages, s.whitelistPages),
+		PagesPerHost:      summarizePagesPerHost(allPages, embeddedPageIDs),
+		PagesPerWhitelist: summarizePagesPerWhitelist(allPages, embeddedPageIDs, s.whitelistPages),
 	}
 
 	s.logger.Info("serve dashboard", "total_pages", total)
@@ -229,10 +251,16 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func summarizePagesPerHost(pages []scraper.SavedPage) []countSummary {
-	counts := make(map[string]int)
+func summarizePagesPerHost(pages []scraper.SavedPage, embeddedPageIDs map[uint]struct{}) []countSummary {
+	counts := make(map[string]countSummary)
 	for _, page := range pages {
-		counts[page.Host]++
+		summary := counts[page.Host]
+		summary.Label = page.Host
+		summary.ScrapedCount++
+		if _, ok := embeddedPageIDs[page.ID]; ok {
+			summary.EmbeddedCount++
+		}
+		counts[page.Host] = summary
 	}
 
 	return sortedSummaries(counts)
@@ -256,6 +284,28 @@ func (s *Server) countEmbeddedPages() (int64, error) {
 	return row.Count, nil
 }
 
+func (s *Server) embeddedPageIDs() (map[uint]struct{}, error) {
+	type row struct {
+		ID uint `gorm:"column:id"`
+	}
+
+	var rows []row
+	result := s.db.Raw(`
+		select saved_pages.id as id
+		from saved_pages
+		inner join page_embeddings on page_embeddings.rowid = saved_pages.id
+	`).Scan(&rows)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	ids := make(map[uint]struct{}, len(rows))
+	for _, row := range rows {
+		ids[row.ID] = struct{}{}
+	}
+	return ids, nil
+}
+
 func embeddingProgressPercent(total int64, embedded int64) int {
 	if total <= 0 || embedded <= 0 {
 		return 0
@@ -266,19 +316,19 @@ func embeddingProgressPercent(total int64, embedded int64) int {
 	return int((embedded * 100) / total)
 }
 
-func summarizePagesPerWhitelist(pages []scraper.SavedPage, whitelistPages []string) []countSummary {
+func summarizePagesPerWhitelist(pages []scraper.SavedPage, embeddedPageIDs map[uint]struct{}, whitelistPages []string) []countSummary {
 	summaries := make([]countSummary, 0, len(whitelistPages))
 	for _, seed := range whitelistPages {
-		count := 0
+		summary := countSummary{Label: seed}
 		for _, page := range pages {
 			if whitelistMatchesPage(seed, page) {
-				count++
+				summary.ScrapedCount++
+				if _, ok := embeddedPageIDs[page.ID]; ok {
+					summary.EmbeddedCount++
+				}
 			}
 		}
-		summaries = append(summaries, countSummary{
-			Label: seed,
-			Count: count,
-		})
+		summaries = append(summaries, summary)
 	}
 
 	return summaries
@@ -301,18 +351,15 @@ func whitelistMatchesPage(seed string, page scraper.SavedPage) bool {
 	return page.Path == seedPath || strings.HasPrefix(page.Path, seedPath+"/")
 }
 
-func sortedSummaries(counts map[string]int) []countSummary {
+func sortedSummaries(counts map[string]countSummary) []countSummary {
 	summaries := make([]countSummary, 0, len(counts))
-	for label, count := range counts {
-		summaries = append(summaries, countSummary{
-			Label: label,
-			Count: count,
-		})
+	for _, summary := range counts {
+		summaries = append(summaries, summary)
 	}
 
 	slices.SortFunc(summaries, func(a, b countSummary) int {
-		if a.Count != b.Count {
-			return b.Count - a.Count
+		if a.ScrapedCount != b.ScrapedCount {
+			return b.ScrapedCount - a.ScrapedCount
 		}
 		return strings.Compare(a.Label, b.Label)
 	})
@@ -377,8 +424,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logger.Info("serve search", "query", query, "results", len(results))
+	summaryText, err := s.summarizeSearch(query, results)
+	if err != nil {
+		s.logger.Error("summarize search failed", "query", query, "err", err)
+	}
 	if err := s.templates.ExecuteTemplate(w, "search.gohtml", searchData{
 		Query:   query,
+		Summary: summaryText,
 		Results: results,
 	}); err != nil {
 		s.logger.Error("render search failed", "query", query, "err", err)
@@ -498,6 +550,26 @@ func (s *Server) searchPages(query string) ([]searchResult, error) {
 	}
 
 	return results, nil
+}
+
+func (s *Server) summarizeSearch(query string, results []searchResult) (string, error) {
+	if s.summarizer == nil || strings.TrimSpace(query) == "" || len(results) == 0 {
+		return "", nil
+	}
+
+	summaryResults := make([]summary.Result, 0, len(results))
+	for _, result := range results {
+		summaryResults = append(summaryResults, summary.Result{
+			URL:        result.Page.URL,
+			Host:       result.Page.Host,
+			Path:       result.Page.Path,
+			Excerpt:    result.Excerpt,
+			Content:    extractPlainText(result.Page.Content),
+			Similarity: result.Similarity,
+		})
+	}
+
+	return s.summarizer.Summarize(context.Background(), query, summaryResults)
 }
 
 func (s *Server) loadPageByPathID(path string, prefix string) (scraper.SavedPage, bool, error) {

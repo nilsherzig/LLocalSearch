@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,7 +29,7 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
-	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nallowed_languages:\n  - en\n  - de\nembeddings:\n  base_url: http://localhost:11434\n  model: qwen3-embedding\n  dimensions: 2560\n  timeout: 3s\n  queue_size: 7\n  batch_size: 5\n  page_token_limit: 1234\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
+	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nallowed_languages:\n  - en\n  - de\nembeddings:\n  base_url: http://localhost:11434\n  model: qwen3-embedding\n  dimensions: 2560\n  timeout: 3s\n  batch_size: 5\n  page_token_limit: 1234\nsummary_llm:\n  model: qwen3.5:9b\n  timeout: 7s\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
 
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -57,14 +58,17 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 	if time.Duration(cfg.Embeddings.Timeout) != 3*time.Second {
 		t.Fatalf("unexpected embedding timeout %v", time.Duration(cfg.Embeddings.Timeout))
 	}
-	if cfg.Embeddings.QueueSize != 7 {
-		t.Fatalf("unexpected embedding queue size %d", cfg.Embeddings.QueueSize)
-	}
 	if cfg.Embeddings.BatchSize != 5 {
 		t.Fatalf("unexpected embedding batch size %d", cfg.Embeddings.BatchSize)
 	}
 	if cfg.Embeddings.PageTokenLimit != 1234 {
 		t.Fatalf("unexpected embedding page token limit %d", cfg.Embeddings.PageTokenLimit)
+	}
+	if cfg.SummaryLLM.Model != "qwen3.5:9b" {
+		t.Fatalf("unexpected summary llm model %q", cfg.SummaryLLM.Model)
+	}
+	if time.Duration(cfg.SummaryLLM.Timeout) != 7*time.Second {
+		t.Fatalf("unexpected summary llm timeout %v", time.Duration(cfg.SummaryLLM.Timeout))
 	}
 
 	wantWebsites := []string{"https://example.com", "https://sub.example.org/start"}
@@ -87,9 +91,6 @@ func TestNormalizeConfigDefaultsEmbeddingWorkerSettings(t *testing.T) {
 		t.Fatalf("normalizeConfig returned error: %v", err)
 	}
 
-	if cfg.Embeddings.QueueSize != 32 {
-		t.Fatalf("expected default queue size 32, got %d", cfg.Embeddings.QueueSize)
-	}
 	if cfg.Embeddings.Dimensions != 2560 {
 		t.Fatalf("expected default embedding dimensions 2560, got %d", cfg.Embeddings.Dimensions)
 	}
@@ -99,8 +100,22 @@ func TestNormalizeConfigDefaultsEmbeddingWorkerSettings(t *testing.T) {
 	if cfg.Embeddings.PageTokenLimit != 3000 {
 		t.Fatalf("expected default page token limit 3000, got %d", cfg.Embeddings.PageTokenLimit)
 	}
+	if cfg.SummaryLLM.Model != "qwen3.5:9b" {
+		t.Fatalf("expected default summary llm model qwen3.5:9b, got %q", cfg.SummaryLLM.Model)
+	}
+	if time.Duration(cfg.SummaryLLM.Timeout) != 30*time.Second {
+		t.Fatalf("expected default summary llm timeout 30s, got %v", time.Duration(cfg.SummaryLLM.Timeout))
+	}
 	if !slices.Equal(cfg.AllowedLanguages, []string{"en"}) {
 		t.Fatalf("expected default allowed languages [en], got %v", cfg.AllowedLanguages)
+	}
+}
+
+func TestEmbeddingConfigDoesNotExposeQueueSize(t *testing.T) {
+	t.Parallel()
+
+	if _, ok := reflect.TypeOf(EmbeddingConfig{}).FieldByName("QueueSize"); ok {
+		t.Fatal("expected embedding config queue size to be removed")
 	}
 }
 

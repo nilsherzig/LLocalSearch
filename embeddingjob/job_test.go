@@ -104,7 +104,7 @@ func TestJobTruncatesPageContentToConfiguredTokenLimit(t *testing.T) {
 		PageKey:     "limited",
 		ContentHash: "hash-limited",
 		ParseMode:   "readability",
-		Content:     "<article><h1>one two</h1><p>three four five</p></article>",
+		Content:     "<article><p>1234567890abcdef</p></article>",
 		ScrapedAt:   time.Date(2026, 3, 23, 10, 2, 0, 0, time.UTC),
 	}
 	if err := db.Create(&page).Error; err != nil {
@@ -131,7 +131,7 @@ func TestJobTruncatesPageContentToConfiguredTokenLimit(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	if got := embedder.calls; len(got) != 1 || len(got[0]) != 1 || got[0][0] != "one two three" {
+	if got := embedder.calls; len(got) != 1 || len(got[0]) != 1 || got[0][0] != "1234567890ab" {
 		t.Fatalf("unexpected embedder calls: %v", got)
 	}
 }
@@ -204,13 +204,115 @@ func TestJobLogsProgressAndTiming(t *testing.T) {
 	}
 }
 
+func TestJobUsesSnapshotAndIgnoresPagesInsertedDuringRun(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "pages.db")
+
+	db, err := vectorstore.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open vector store: %v", err)
+	}
+	if err := db.AutoMigrate(&scraper.SavedPage{}); err != nil {
+		t.Fatalf("migrate saved pages: %v", err)
+	}
+	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 3); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	initialPage := scraper.SavedPage{
+		URL:         "https://example.com/initial",
+		Host:        "example.com",
+		Path:        "/initial",
+		PageKey:     "initial",
+		ContentHash: "hash-initial",
+		ParseMode:   "readability",
+		Content:     "<article><p>initial</p></article>",
+		ScrapedAt:   time.Date(2026, 3, 23, 10, 6, 0, 0, time.UTC),
+	}
+	if err := db.Create(&initialPage).Error; err != nil {
+		t.Fatalf("create initial page: %v", err)
+	}
+
+	inserted := false
+	embedder := &recordingEmbedder{
+		vectors: [][]float32{{1, 0, 0}},
+		beforeReturn: func() error {
+			if inserted {
+				return nil
+			}
+
+			page := scraper.SavedPage{
+				URL:         "https://example.com/new",
+				Host:        "example.com",
+				Path:        "/new",
+				PageKey:     "new",
+				ContentHash: "hash-new",
+				ParseMode:   "readability",
+				Content:     "<article><p>new</p></article>",
+				ScrapedAt:   time.Date(2026, 3, 23, 10, 7, 0, 0, time.UTC),
+			}
+			if err := db.Create(&page).Error; err != nil {
+				return fmt.Errorf("create concurrent page: %w", err)
+			}
+
+			inserted = true
+			return nil
+		},
+	}
+	job, err := New(Config{
+		DBPath:     dbPath,
+		BatchSize:  1,
+		Dimensions: 3,
+		Model:      "qwen3-embedding",
+		Embedder:   embedder,
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	result, err := job.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if result.TotalMissing != 1 {
+		t.Fatalf("expected snapshot total missing to stay at 1, got %d", result.TotalMissing)
+	}
+	if result.EmbeddedPages != 1 {
+		t.Fatalf("expected 1 embedded page, got %d", result.EmbeddedPages)
+	}
+	if got := embedder.calls; len(got) != 1 || len(got[0]) != 1 || got[0][0] != "initial" {
+		t.Fatalf("unexpected embedder calls: %v", got)
+	}
+
+	var missing int64
+	if err := db.Raw(`
+		select count(*)
+		from saved_pages
+		left join page_embeddings on page_embeddings.rowid = saved_pages.id
+		where page_embeddings.rowid is null
+	`).Scan(&missing).Error; err != nil {
+		t.Fatalf("count missing embeddings: %v", err)
+	}
+	if missing != 1 {
+		t.Fatalf("expected newly inserted page to remain unembedded, got %d missing pages", missing)
+	}
+}
+
 type recordingEmbedder struct {
-	vectors [][]float32
-	calls   [][]string
+	vectors      [][]float32
+	calls        [][]string
+	beforeReturn func() error
 }
 
 func (r *recordingEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
 	r.calls = append(r.calls, append([]string(nil), inputs...))
+	if r.beforeReturn != nil {
+		if err := r.beforeReturn(); err != nil {
+			return nil, err
+		}
+	}
 	if len(r.vectors) < len(inputs) {
 		return nil, fmt.Errorf("not enough vectors")
 	}

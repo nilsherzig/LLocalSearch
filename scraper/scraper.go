@@ -31,11 +31,12 @@ import (
 )
 
 type Config struct {
-	CacheDir         string          `yaml:"cache_dir"`
-	HostDelay        Duration        `yaml:"host_delay"`
-	AllowedLanguages []string        `yaml:"allowed_languages"`
-	Embeddings       EmbeddingConfig `yaml:"embeddings"`
-	Websites         []string        `yaml:"websites"`
+	CacheDir         string           `yaml:"cache_dir"`
+	HostDelay        Duration         `yaml:"host_delay"`
+	AllowedLanguages []string         `yaml:"allowed_languages"`
+	Embeddings       EmbeddingConfig  `yaml:"embeddings"`
+	SummaryLLM       SummaryLLMConfig `yaml:"summary_llm"`
+	Websites         []string         `yaml:"websites"`
 }
 
 type EmbeddingConfig struct {
@@ -43,9 +44,13 @@ type EmbeddingConfig struct {
 	Model          string   `yaml:"model"`
 	Dimensions     int      `yaml:"dimensions"`
 	Timeout        Duration `yaml:"timeout"`
-	QueueSize      int      `yaml:"queue_size"`
 	BatchSize      int      `yaml:"batch_size"`
 	PageTokenLimit int      `yaml:"page_token_limit"`
+}
+
+type SummaryLLMConfig struct {
+	Model   string   `yaml:"model"`
+	Timeout Duration `yaml:"timeout"`
 }
 
 type SessionPageEvent struct {
@@ -451,6 +456,7 @@ func normalizeConfig(cfg Config) (Config, error) {
 		HostDelay:        cfg.HostDelay,
 		AllowedLanguages: nil,
 		Embeddings:       cfg.Embeddings,
+		SummaryLLM:       cfg.SummaryLLM,
 		Websites:         make([]string, 0, len(cfg.Websites)),
 	}
 
@@ -463,14 +469,17 @@ func normalizeConfig(cfg Config) (Config, error) {
 	if normalized.Embeddings.Timeout <= 0 {
 		normalized.Embeddings.Timeout = Duration(30 * time.Second)
 	}
-	if normalized.Embeddings.QueueSize <= 0 {
-		normalized.Embeddings.QueueSize = 32
-	}
 	if normalized.Embeddings.BatchSize <= 0 {
 		normalized.Embeddings.BatchSize = 8
 	}
 	if normalized.Embeddings.PageTokenLimit <= 0 {
 		normalized.Embeddings.PageTokenLimit = 3000
+	}
+	if normalized.SummaryLLM.Model == "" {
+		normalized.SummaryLLM.Model = "qwen3.5:9b"
+	}
+	if normalized.SummaryLLM.Timeout <= 0 {
+		normalized.SummaryLLM.Timeout = Duration(30 * time.Second)
 	}
 	if cfg.AllowedLanguages == nil {
 		normalized.AllowedLanguages = []string{"en"}

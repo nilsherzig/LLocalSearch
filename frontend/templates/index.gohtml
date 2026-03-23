@@ -167,7 +167,7 @@
         <h2>Pages per host</h2>
         <ul>
           {{range .PagesPerHost}}
-          <li><strong>{{.Label}}</strong>: {{.Count}} pages</li>
+          <li><strong>{{.Label}}</strong>: {{.ScrapedCount}} scraped pages, {{.EmbeddedCount}} embedded pages</li>
           {{else}}
           <li>No host data yet.</li>
           {{end}}
@@ -177,7 +177,7 @@
         <h2>Pages per whitelist target</h2>
         <ul>
           {{range .PagesPerWhitelist}}
-          <li><strong>{{.Label}}</strong>: {{.Count}} scraped pages</li>
+          <li><strong>{{.Label}}</strong>: {{.ScrapedCount}} scraped pages, {{.EmbeddedCount}} embedded pages</li>
           {{else}}
           <li>No whitelist targets configured.</li>
           {{end}}

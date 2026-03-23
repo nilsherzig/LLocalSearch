@@ -16,6 +16,7 @@ import (
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/nilsherzig/llocalsearch/scraper"
+	"github.com/nilsherzig/llocalsearch/summary"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -48,17 +49,23 @@ func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
 	if !strings.Contains(body, "https://example.com/article") {
 		t.Fatalf("expected recent page url in dashboard, got %q", body)
 	}
-	if !strings.Contains(body, "example.com") || !strings.Contains(body, "2 pages") {
-		t.Fatalf("expected host summary in dashboard, got %q", body)
+	if !strings.Contains(body, "<strong>example.com</strong>: 2 scraped pages, 2 embedded pages") {
+		t.Fatalf("expected embedded host summary for example.com, got %q", body)
 	}
-	if !strings.Contains(body, "news.example.org") || !strings.Contains(body, "1 pages") {
-		t.Fatalf("expected second host summary in dashboard, got %q", body)
+	if !strings.Contains(body, "<strong>news.example.org</strong>: 1 scraped pages, 0 embedded pages") {
+		t.Fatalf("expected embedded host summary for news.example.org, got %q", body)
 	}
 	if !strings.Contains(body, "https://example.com") || !strings.Contains(body, "2 scraped pages") {
 		t.Fatalf("expected whitelist seed summary for example.com, got %q", body)
 	}
 	if !strings.Contains(body, "https://news.example.org/start") || !strings.Contains(body, "1 scraped pages") {
 		t.Fatalf("expected whitelist seed summary for news.example.org/start, got %q", body)
+	}
+	if !strings.Contains(body, "<strong>https://example.com</strong>: 2 scraped pages, 2 embedded pages") {
+		t.Fatalf("expected embedded whitelist summary for example.com, got %q", body)
+	}
+	if !strings.Contains(body, "<strong>https://news.example.org/start</strong>: 1 scraped pages, 0 embedded pages") {
+		t.Fatalf("expected embedded whitelist summary for news.example.org/start, got %q", body)
 	}
 	if !strings.Contains(body, `action="/search"`) {
 		t.Fatalf("expected search form on dashboard, got %q", body)
@@ -116,6 +123,30 @@ func TestPageDetailHandlerShowsScrapedContent(t *testing.T) {
 	}
 }
 
+func TestPageDetailHandlerConstrainsImagesToContentWidth(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/pages/1", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, ".content img") {
+		t.Fatalf("expected image styling in detail view, got %q", body)
+	}
+	if !strings.Contains(body, "max-width: 100%") {
+		t.Fatalf("expected images constrained to content width, got %q", body)
+	}
+	if !strings.Contains(body, "height: auto") {
+		t.Fatalf("expected image aspect ratio to be preserved, got %q", body)
+	}
+}
+
 func TestPageDetailHandlerReturnsNotFoundForUnknownPage(t *testing.T) {
 	server, _ := newTestServer(t)
 
@@ -165,8 +196,76 @@ func TestSearchHandlerFindsFuzzyMatchesAcrossDownloadedPages(t *testing.T) {
 	}
 }
 
+func TestSearchHandlerRendersSummaryForWebResults(t *testing.T) {
+	server, dbPath := newTestServer(t, testServerOptions{
+		summarizer: testSummarizer{
+			summary: "The results focus on Kubernetes guidance from the scraped pages.",
+		},
+	})
+	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
+		t.Fatalf("insert first embedding: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 2, vectorWithLead(0, 1, 0)); err != nil {
+		t.Fatalf("insert second embedding: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 3, vectorWithLead(0, 0, 1)); err != nil {
+		t.Fatalf("insert third embedding: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=kubernetes+guide", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Summary") {
+		t.Fatalf("expected summary heading, got %q", body)
+	}
+	if !strings.Contains(body, "The results focus on Kubernetes guidance from the scraped pages.") {
+		t.Fatalf("expected summary text, got %q", body)
+	}
+}
+
+func TestSearchHandlerPassesPlainContentContextToSummarizer(t *testing.T) {
+	capturing := &capturingSummarizer{summary: "summary"}
+	server, dbPath := newTestServer(t, testServerOptions{
+		summarizer: capturing,
+	})
+	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
+		t.Fatalf("insert first embedding: %v", err)
+	}
+
+	longContent := "<article><p>Intro text before the main topic. kubernetes guide explains cluster setup and operations in detail.</p><p>Additional context that should reach the summarizer even when the excerpt is shorter. Unique tail marker.</p></article>"
+	if err := server.db.Model(&scraper.SavedPage{}).Where("id = ?", 1).Update("content", longContent).Error; err != nil {
+		t.Fatalf("update page content: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=kubernetes+guide", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if len(capturing.gotResults) != 1 {
+		t.Fatalf("expected one summarized result, got %d", len(capturing.gotResults))
+	}
+	if !strings.Contains(capturing.gotResults[0].Content, "Unique tail marker.") {
+		t.Fatalf("expected full plain text content in summarizer input, got %#v", capturing.gotResults[0])
+	}
+}
+
 func TestSearchAPIHandlerReturnsJSONResults(t *testing.T) {
-	server, dbPath := newTestServer(t)
+	server, dbPath := newTestServer(t, testServerOptions{
+		summarizer: testSummarizer{
+			summary: "The API response must not include this summary.",
+		},
+	})
 	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
 		t.Fatalf("insert first embedding: %v", err)
 	}
@@ -208,6 +307,9 @@ func TestSearchAPIHandlerReturnsJSONResults(t *testing.T) {
 	}
 	if response.Results[0].Similarity != 1 {
 		t.Fatalf("expected similarity 1 for exact vector match, got %v", response.Results[0].Similarity)
+	}
+	if strings.Contains(rec.Body.String(), "The API response must not include this summary.") {
+		t.Fatalf("expected summary to stay out of api response, got %q", rec.Body.String())
 	}
 }
 
@@ -269,7 +371,7 @@ func TestPageContentAPIHandlerReturnsNotFoundForUnknownPage(t *testing.T) {
 }
 
 func TestSearchHandlerReturnsInternalServerErrorWhenEmbeddingFails(t *testing.T) {
-	server, _ := newTestServer(t, testEmbedder{err: context.DeadlineExceeded})
+	server, _ := newTestServer(t, testServerOptions{embedder: testEmbedder{err: context.DeadlineExceeded}})
 
 	req := httptest.NewRequest(http.MethodGet, "/search?q=test", nil)
 	rec := httptest.NewRecorder()
@@ -282,7 +384,7 @@ func TestSearchHandlerReturnsInternalServerErrorWhenEmbeddingFails(t *testing.T)
 }
 
 func TestSearchAPIHandlerReturnsJSONErrorWhenEmbeddingFails(t *testing.T) {
-	server, _ := newTestServer(t, testEmbedder{err: context.DeadlineExceeded})
+	server, _ := newTestServer(t, testServerOptions{embedder: testEmbedder{err: context.DeadlineExceeded}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=test", nil)
 	rec := httptest.NewRecorder()
@@ -300,7 +402,12 @@ func TestSearchAPIHandlerReturnsJSONErrorWhenEmbeddingFails(t *testing.T) {
 	}
 }
 
-func newTestServer(t *testing.T, overrides ...testEmbedder) (*Server, string) {
+type testServerOptions struct {
+	embedder   testEmbedder
+	summarizer summary.Client
+}
+
+func newTestServer(t *testing.T, overrides ...testServerOptions) (*Server, string) {
 	t.Helper()
 
 	tempDir := t.TempDir()
@@ -353,8 +460,12 @@ func newTestServer(t *testing.T, overrides ...testEmbedder) (*Server, string) {
 	}
 
 	embedder := testEmbedder{vectors: [][]float32{vectorWithLead(1, 0, 0)}}
+	var summarizer summary.Client
 	if len(overrides) > 0 {
-		embedder = overrides[0]
+		if len(overrides[0].embedder.vectors) > 0 || overrides[0].embedder.err != nil {
+			embedder = overrides[0].embedder
+		}
+		summarizer = overrides[0].summarizer
 	}
 
 	server, err := NewServer(Config{
@@ -362,6 +473,7 @@ func newTestServer(t *testing.T, overrides ...testEmbedder) (*Server, string) {
 		TemplatesDir: filepath.Join(filepath.Dir(testFile), "templates"),
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		Embedder:     embedder,
+		Summarizer:   summarizer,
 		WhitelistPages: []string{
 			"https://example.com",
 			"https://news.example.org/start",
@@ -402,6 +514,16 @@ type testEmbedder struct {
 	err     error
 }
 
+type testSummarizer struct {
+	summary string
+	err     error
+}
+
+type capturingSummarizer struct {
+	summary    string
+	gotResults []summary.Result
+}
+
 func (t testEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
 	if t.err != nil {
 		return nil, t.err
@@ -417,6 +539,21 @@ func (t testEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, er
 		result = append(result, append([]float32(nil), vectors[i%len(vectors)]...))
 	}
 	return result, nil
+}
+
+func (t testSummarizer) Summarize(_ context.Context, query string, results []summary.Result) (string, error) {
+	if t.err != nil {
+		return "", t.err
+	}
+	if strings.TrimSpace(query) == "" || len(results) == 0 {
+		return "", nil
+	}
+	return t.summary, nil
+}
+
+func (c *capturingSummarizer) Summarize(_ context.Context, query string, results []summary.Result) (string, error) {
+	c.gotResults = append([]summary.Result(nil), results...)
+	return c.summary, nil
 }
 
 func vectorWithLead(values ...float32) []float32 {

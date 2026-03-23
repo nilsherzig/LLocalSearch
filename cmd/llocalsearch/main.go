@@ -192,6 +192,7 @@ func runWeb(args []string, stderr io.Writer, listen listenFunc) error {
 		DBPath:         filepath.Join(cfg.CacheDir, "pages.db"),
 		TemplatesDir:   *templatesDir,
 		Embeddings:     cfg.Embeddings,
+		SummaryLLM:     cfg.SummaryLLM,
 		WhitelistPages: cfg.Websites,
 		Logger:         logger,
 	})

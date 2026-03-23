@@ -89,6 +89,12 @@
     <section class="panel">
       {{if .Query}}
         {{if .Results}}
+          {{if .Summary}}
+          <article class="result">
+            <h2>Summary</h2>
+            <p>{{.Summary}}</p>
+          </article>
+          {{end}}
           {{range .Results}}
           <article class="result">
             <h2><a href="/pages/{{.Page.ID}}">{{.Page.URL}}</a></h2>

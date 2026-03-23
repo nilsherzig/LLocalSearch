@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nilsherzig/llocalsearch/embedding"
 	"github.com/nilsherzig/llocalsearch/scraper"
@@ -48,6 +49,7 @@ type pendingPage struct {
 }
 
 const defaultPageTokenLimit = 3000
+const approxCharsPerToken = 4
 
 func New(cfg Config) (*Job, error) {
 	if cfg.DBPath == "" {
@@ -111,7 +113,11 @@ func New(cfg Config) (*Job, error) {
 }
 
 func (j *Job) Run(ctx context.Context) (Result, error) {
-	totalMissing, err := j.countMissingEmbeddings()
+	snapshotMaxID, err := j.snapshotMaxSavedPageID()
+	if err != nil {
+		return Result{}, err
+	}
+	totalMissing, err := j.countMissingEmbeddings(snapshotMaxID)
 	if err != nil {
 		return Result{}, err
 	}
@@ -120,8 +126,9 @@ func (j *Job) Run(ctx context.Context) (Result, error) {
 	j.logger.Info("embedding job started", "total_missing", totalMissing, "batch_size", j.batchSize)
 
 	result := Result{TotalMissing: int(totalMissing)}
+	var lastSeenID uint
 	for {
-		batch, err := j.loadMissingBatch()
+		batch, err := j.loadMissingBatch(snapshotMaxID, lastSeenID)
 		if err != nil {
 			return result, err
 		}
@@ -154,6 +161,7 @@ func (j *Job) Run(ctx context.Context) (Result, error) {
 			return result, err
 		}
 
+		lastSeenID = batch[len(batch)-1].ID
 		result.EmbeddedPages += len(batch)
 		batchDuration := time.Since(batchStartedAt)
 		remaining := result.TotalMissing - result.EmbeddedPages
@@ -183,14 +191,24 @@ func (j *Job) Run(ctx context.Context) (Result, error) {
 	return result, nil
 }
 
-func (j *Job) countMissingEmbeddings() (int64, error) {
+func (j *Job) snapshotMaxSavedPageID() (uint, error) {
+	var maxID uint
+	result := j.db.Raw(`select coalesce(max(id), 0) from saved_pages`).Scan(&maxID)
+	if result.Error != nil {
+		return 0, fmt.Errorf("snapshot max saved page id: %w", result.Error)
+	}
+	return maxID, nil
+}
+
+func (j *Job) countMissingEmbeddings(snapshotMaxID uint) (int64, error) {
 	var count int64
 	result := j.db.Raw(`
 		select count(*)
 		from saved_pages
 		left join page_embeddings on page_embeddings.rowid = saved_pages.id
-		where page_embeddings.rowid is null
-	`).Scan(&count)
+		where saved_pages.id <= ?
+		  and page_embeddings.rowid is null
+	`, snapshotMaxID).Scan(&count)
 	if result.Error != nil {
 		return 0, fmt.Errorf("count pages without embeddings: %w", result.Error)
 	}
@@ -198,16 +216,18 @@ func (j *Job) countMissingEmbeddings() (int64, error) {
 	return count, nil
 }
 
-func (j *Job) loadMissingBatch() ([]pendingPage, error) {
+func (j *Job) loadMissingBatch(snapshotMaxID uint, lastSeenID uint) ([]pendingPage, error) {
 	var pages []pendingPage
 	result := j.db.Raw(`
 		select saved_pages.id, saved_pages.content
 		from saved_pages
 		left join page_embeddings on page_embeddings.rowid = saved_pages.id
-		where page_embeddings.rowid is null
+		where saved_pages.id > ?
+		  and saved_pages.id <= ?
+		  and page_embeddings.rowid is null
 		order by saved_pages.id asc
 		limit ?
-	`, j.batchSize).Scan(&pages)
+	`, lastSeenID, snapshotMaxID, j.batchSize).Scan(&pages)
 	if result.Error != nil {
 		return nil, fmt.Errorf("load pages without embeddings: %w", result.Error)
 	}
@@ -238,15 +258,20 @@ func extractPlainText(content string, tokenLimit int) string {
 	}
 }
 
-// Apply a model-agnostic cap using normalized whitespace-delimited terms.
+// Apply a model-agnostic cap using a fixed character-per-token approximation.
 func limitTokens(text string, tokenLimit int) string {
 	if tokenLimit <= 0 {
 		return text
 	}
 
-	tokens := strings.Fields(text)
-	if len(tokens) <= tokenLimit {
-		return strings.Join(tokens, " ")
+	maxChars := tokenLimit * approxCharsPerToken
+	if maxChars <= 0 {
+		return text
 	}
-	return strings.Join(tokens[:tokenLimit], " ")
+	if utf8.RuneCountInString(text) <= maxChars {
+		return text
+	}
+
+	runes := []rune(text)
+	return strings.TrimSpace(string(runes[:maxChars]))
 }

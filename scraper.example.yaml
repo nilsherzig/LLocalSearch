@@ -10,16 +10,22 @@ embeddings:
   # model: nomic-embed-text-v2-moe
   # dimensions: 256
   timeout: 30s
-  queue_size: 2
-  batch_size: 1
+  batch_size: 4
   page_token_limit: 3000
+summary_llm:
+  model: qwen3.5:9b
+  timeout: 30s
 websites:
   - https://go-colly.org
   - https://book.kubebuilder.io
   - https://www.flatcar.org
   - https://wiki.nixos.org
-  - https://ghostty.org
+  # - https://ghostty.org
+  - https://ghostty.org/docs
   - https://docs.k3s.io
   - https://kubernetes.io
   - https://docs.wiit-cloud.io
   - https://gobyexample.com
+  - https://gowebexamples.com
+  - https://www.home-assistant.io
+  - https://www.wheresyoured.at
