@@ -21,7 +21,13 @@ import (
 )
 
 func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
-	server, _ := newTestServer(t)
+	server, dbPath := newTestServer(t)
+	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
+		t.Fatalf("insert first embedding: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 2, vectorWithLead(0, 1, 0)); err != nil {
+		t.Fatalf("insert second embedding: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -35,6 +41,9 @@ func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "3 scraped pages") {
 		t.Fatalf("expected scraped page count in dashboard, got %q", body)
+	}
+	if !strings.Contains(body, "2 embedded pages") {
+		t.Fatalf("expected embedded page count in dashboard, got %q", body)
 	}
 	if !strings.Contains(body, "https://example.com/article") {
 		t.Fatalf("expected recent page url in dashboard, got %q", body)
@@ -53,6 +62,15 @@ func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
 	}
 	if !strings.Contains(body, `action="/search"`) {
 		t.Fatalf("expected search form on dashboard, got %q", body)
+	}
+	if !strings.Contains(body, "2 of 3 pages embedded") {
+		t.Fatalf("expected embedding progress summary in dashboard, got %q", body)
+	}
+	if !strings.Contains(body, `role="progressbar"`) {
+		t.Fatalf("expected embedding progress bar in dashboard, got %q", body)
+	}
+	if !strings.Contains(body, `aria-valuenow="66"`) {
+		t.Fatalf("expected embedding progress value in dashboard, got %q", body)
 	}
 }
 

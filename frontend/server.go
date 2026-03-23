@@ -48,6 +48,8 @@ type countSummary struct {
 
 type dashboardData struct {
 	TotalPages        int64
+	EmbeddedPages     int64
+	EmbeddingProgress int
 	LatestScraped     string
 	RecentPages       []scraper.SavedPage
 	PagesPerHost      []countSummary
@@ -192,6 +194,12 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	embeddedPages, err := s.countEmbeddedPages()
+	if err != nil {
+		s.logger.Error("count embedded pages failed", "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	var allPages []scraper.SavedPage
 	if err := s.db.Find(&allPages).Error; err != nil {
 		s.logger.Error("load pages for dashboard failed", "err", err)
@@ -206,6 +214,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	data := dashboardData{
 		TotalPages:        total,
+		EmbeddedPages:     embeddedPages,
+		EmbeddingProgress: embeddingProgressPercent(total, embeddedPages),
 		LatestScraped:     latestScraped,
 		RecentPages:       recentPages,
 		PagesPerHost:      summarizePagesPerHost(allPages),
@@ -226,6 +236,34 @@ func summarizePagesPerHost(pages []scraper.SavedPage) []countSummary {
 	}
 
 	return sortedSummaries(counts)
+}
+
+func (s *Server) countEmbeddedPages() (int64, error) {
+	type countRow struct {
+		Count int64 `gorm:"column:count"`
+	}
+
+	var row countRow
+	result := s.db.Raw(`
+		select count(*) as count
+		from saved_pages
+		inner join page_embeddings on page_embeddings.rowid = saved_pages.id
+	`).Scan(&row)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+
+	return row.Count, nil
+}
+
+func embeddingProgressPercent(total int64, embedded int64) int {
+	if total <= 0 || embedded <= 0 {
+		return 0
+	}
+	if embedded >= total {
+		return 100
+	}
+	return int((embedded * 100) / total)
 }
 
 func summarizePagesPerWhitelist(pages []scraper.SavedPage, whitelistPages []string) []countSummary {

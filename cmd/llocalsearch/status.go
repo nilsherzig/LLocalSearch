@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"sort"
 	"sync"
 	"time"
 
@@ -26,17 +25,16 @@ func (t *timeTicker) Chan() <-chan time.Time {
 }
 
 type sessionStatusReporter struct {
-	writer             io.Writer
-	startedAt          time.Time
-	now                func() time.Time
-	ticker             statusTicker
-	stop               chan struct{}
-	done               chan struct{}
-	stopOnce           sync.Once
-	pagesScraped       int
-	embeddingDurations []time.Duration
-	failures           []time.Time
-	mu                 sync.Mutex
+	writer       io.Writer
+	startedAt    time.Time
+	now          func() time.Time
+	ticker       statusTicker
+	stop         chan struct{}
+	done         chan struct{}
+	stopOnce     sync.Once
+	pagesScraped int
+	failures     []time.Time
+	mu           sync.Mutex
 }
 
 func newSessionStatusReporter(writer io.Writer) *sessionStatusReporter {
@@ -75,9 +73,6 @@ func (r *sessionStatusReporter) OnPageSaved(event scraper.SessionPageEvent) {
 	defer r.mu.Unlock()
 
 	r.pagesScraped++
-	if !event.Reused && event.EmbeddingDuration > 0 {
-		r.embeddingDurations = append(r.embeddingDurations, event.EmbeddingDuration)
-	}
 }
 
 func (r *sessionStatusReporter) OnRequestFailed(event scraper.SessionFailureEvent) {
@@ -138,10 +133,9 @@ func (r *sessionStatusReporter) statusLineLocked(now time.Time, final bool) stri
 	}
 
 	return fmt.Sprintf(
-		"session_elapsed=%s pages_per_minute=%.2f median_embedding_time=%s pages_scraped_in_session=%d failed_requests_per_minute=%.2f failed_requests_last_minute=%d final=%t",
+		"session_elapsed=%s pages_per_minute=%.2f pages_scraped_in_session=%d failed_requests_per_minute=%.2f failed_requests_last_minute=%d final=%t",
 		formatElapsedDuration(elapsed),
 		float64(r.pagesScraped)/elapsedMinutes,
-		formatMedianDuration(r.embeddingDurations),
 		r.pagesScraped,
 		float64(len(r.failures))/elapsedMinutes,
 		failedLastMinute,
@@ -161,22 +155,4 @@ func formatElapsedDuration(elapsed time.Duration) string {
 		return elapsed.Round(time.Millisecond).String()
 	}
 	return elapsed.Round(time.Second).String()
-}
-
-func formatMedianDuration(samples []time.Duration) string {
-	if len(samples) == 0 {
-		return "n/a"
-	}
-
-	sorted := append([]time.Duration(nil), samples...)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i] < sorted[j]
-	})
-
-	mid := len(sorted) / 2
-	if len(sorted)%2 == 1 {
-		return sorted[mid].Round(time.Millisecond).String()
-	}
-
-	return ((sorted[mid-1] + sorted[mid]) / 2).Round(time.Millisecond).String()
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
@@ -85,6 +86,9 @@ func DeleteEmbeddings(db *gorm.DB, rowIDs []uint) error {
 	}
 
 	if err := db.Exec(`delete from page_embeddings where rowid in (`+string(placeholders)+`)`, args...).Error; err != nil {
+		if isMissingEmbeddingsTableError(err) {
+			return nil
+		}
 		return fmt.Errorf("delete page embeddings: %w", err)
 	}
 
@@ -165,4 +169,8 @@ func ensureConfigValue(db *gorm.DB, key string, want string) error {
 		return fmt.Errorf("embedding config mismatch for %s: database=%q config=%q", key, row.Value, want)
 	}
 	return nil
+}
+
+func isMissingEmbeddingsTableError(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "no such table: page_embeddings")
 }

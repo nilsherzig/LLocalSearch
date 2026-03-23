@@ -2,7 +2,6 @@ package scraper
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -93,9 +92,7 @@ type Scraper struct {
 	db               *gorm.DB
 	embedder         embedding.Client
 	observer         SessionObserver
-	saveQueue        chan saveRequest
-
-	embeddingBatchSize int
+	saveMu           sync.Mutex
 }
 
 type SavedPage struct {
@@ -218,19 +215,6 @@ type saveResult struct {
 	Reused            bool
 }
 
-type saveRequest struct {
-	parsedURL  *url.URL
-	scrapeTime time.Time
-	content    string
-	parseMode  string
-	result     chan saveResponse
-}
-
-type saveResponse struct {
-	result saveResult
-	err    error
-}
-
 func New(cfg Config, opts ...Option) (*Scraper, error) {
 	normalized, err := normalizeConfig(cfg)
 	if err != nil {
@@ -265,15 +249,6 @@ func New(cfg Config, opts ...Option) (*Scraper, error) {
 		opt(s)
 	}
 
-	if s.embedder == nil && normalized.Embeddings.BaseURL != "" && normalized.Embeddings.Model != "" {
-		s.embedder = embedding.NewClient(embedding.Config{
-			BaseURL:    normalized.Embeddings.BaseURL,
-			Model:      normalized.Embeddings.Model,
-			Dimensions: normalized.Embeddings.Dimensions,
-			Timeout:    time.Duration(normalized.Embeddings.Timeout),
-		}, nil)
-	}
-
 	db, err := vectorstore.Open(s.dbPath)
 	if err != nil {
 		return nil, err
@@ -281,16 +256,10 @@ func New(cfg Config, opts ...Option) (*Scraper, error) {
 	if err := db.AutoMigrate(&SavedPage{}); err != nil {
 		return nil, fmt.Errorf("migrate sqlite database: %w", err)
 	}
-	if err := vectorstore.EnsureSchema(db, normalized.Embeddings.Model, normalized.Embeddings.Dimensions); err != nil {
-		return nil, err
-	}
 	s.db = db
 	if err := s.deletePagesForUnconfiguredHosts(); err != nil {
 		return nil, err
 	}
-	s.saveQueue = make(chan saveRequest, normalized.Embeddings.QueueSize)
-	s.embeddingBatchSize = normalized.Embeddings.BatchSize
-	go s.runSaveWorker()
 
 	return s, nil
 }
@@ -704,156 +673,17 @@ func (s *Scraper) saveReadablePage(pageURL string, body []byte, scrapeTime time.
 }
 
 func (s *Scraper) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) (saveResult, error) {
-	responseCh := make(chan saveResponse, 1)
-	s.saveQueue <- saveRequest{
-		parsedURL:  cloneURL(parsedURL),
-		scrapeTime: scrapeTime,
-		content:    content,
-		parseMode:  parseMode,
-		result:     responseCh,
-	}
-	response := <-responseCh
-	return response.result, response.err
-}
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 
-func (s *Scraper) runSaveWorker() {
-	for request := range s.saveQueue {
-		s.processSaveBatch(s.collectSaveBatch(request))
-	}
-}
-
-func (s *Scraper) collectSaveBatch(first saveRequest) []saveRequest {
-	batchSize := s.embeddingBatchSize
-	if batchSize <= 0 {
-		batchSize = 1
-	}
-
-	batch := []saveRequest{first}
-	for len(batch) < batchSize {
-		select {
-		case request, ok := <-s.saveQueue:
-			if !ok {
-				return batch
-			}
-			batch = append(batch, request)
-		default:
-			return batch
-		}
-	}
-
-	return batch
-}
-
-type preparedSave struct {
-	request saveRequest
-	page    SavedPage
-	text    string
-}
-
-func (s *Scraper) processSaveBatch(batch []saveRequest) {
-	if len(batch) == 0 {
-		return
-	}
-
-	prepared := make([]preparedSave, 0, len(batch))
-	inputs := make([]string, 0, len(batch))
-	for _, request := range batch {
-		pending, existingResult, err := s.prepareSaveRequest(request)
-		if err != nil {
-			request.result <- saveResponse{err: err}
-			continue
-		}
-		if existingResult != nil {
-			request.result <- saveResponse{result: *existingResult}
-			continue
-		}
-
-		prepared = append(prepared, pending)
-		inputs = append(inputs, pending.text)
-	}
-
-	if len(prepared) == 0 {
-		if len(batch) > 0 && len(batch) != len(prepared) {
-			s.logInfo("embedding batch skipped", "queued", len(batch), "reused", len(batch)-len(prepared))
-		}
-		return
-	}
-
-	s.logInfo("embedding batch started", "queued", len(batch), "to_embed", len(prepared), "reused", len(batch)-len(prepared))
-
-	if s.embedder == nil {
-		err := fmt.Errorf("embedder not configured")
-		s.logError("embedding batch failed", "queued", len(batch), "to_embed", len(prepared), "err", err)
-		for _, pending := range prepared {
-			pending.request.result <- saveResponse{err: err}
-		}
-		return
-	}
-
-	embeddingStart := time.Now()
-	vectors, err := s.embedder.Embed(context.Background(), inputs)
-	if err != nil {
-		wrapped := fmt.Errorf("embed page content: %w", err)
-		s.logError("embedding batch failed", "queued", len(batch), "to_embed", len(prepared), "err", wrapped)
-		for _, pending := range prepared {
-			pending.request.result <- saveResponse{err: wrapped}
-		}
-		return
-	}
-	embeddingDuration := time.Since(embeddingStart)
-	if len(vectors) != len(prepared) {
-		err := fmt.Errorf("embed page content returned %d vectors", len(vectors))
-		s.logError("embedding batch failed", "queued", len(batch), "to_embed", len(prepared), "err", err)
-		for _, pending := range prepared {
-			pending.request.result <- saveResponse{err: err}
-		}
-		return
-	}
-	s.logInfo("embedding batch finished", "queued", len(batch), "to_embed", len(prepared), "duration", embeddingDuration)
-
-	for i, pending := range prepared {
-		result, err := s.persistPreparedPage(pending.page, vectors[i], embeddingDuration)
-		pending.request.result <- saveResponse{result: result, err: err}
-	}
-}
-
-func (s *Scraper) logInfo(msg string, args ...any) {
-	if s.logger == nil {
-		return
-	}
-	s.logger.Info(msg, args...)
-}
-
-func (s *Scraper) logError(msg string, args ...any) {
-	if s.logger == nil {
-		return
-	}
-	s.logger.Error(msg, args...)
-}
-
-func (s *Scraper) prepareSaveRequest(request saveRequest) (preparedSave, *saveResult, error) {
-	page := buildSavedPage(request.parsedURL, request.scrapeTime, request.content, request.parseMode)
-
+	page := buildSavedPage(parsedURL, scrapeTime, content, parseMode)
 	if existing, ok, err := s.findSavedPage(page.URL, page.ContentHash); err != nil {
-		return preparedSave{}, nil, err
+		return saveResult{}, err
 	} else if ok {
-		result := saveResult{Page: existing, Reused: true}
-		return preparedSave{}, &result, nil
+		return saveResult{Page: existing, Reused: true}, nil
 	}
 
-	return preparedSave{
-		request: request,
-		page:    page,
-		text:    extractPlainText(request.content),
-	}, nil, nil
-}
-
-func (s *Scraper) persistPreparedPage(page SavedPage, vector []float32, embeddingDuration time.Duration) (saveResult, error) {
 	var saved SavedPage
-	if len(vector) == 0 {
-		return saveResult{}, fmt.Errorf("embed page content returned empty vector")
-	}
-
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		var stalePages []SavedPage
 		if err := tx.Where("url = ?", page.URL).Find(&stalePages).Error; err != nil {
@@ -875,16 +705,20 @@ func (s *Scraper) persistPreparedPage(page SavedPage, vector []float32, embeddin
 		if err := tx.Create(&pageToSave).Error; err != nil {
 			return fmt.Errorf("insert page: %w", err)
 		}
-		if err := vectorstore.UpsertEmbedding(tx, pageToSave.ID, vector); err != nil {
-			return err
-		}
 		saved = pageToSave
 		return nil
 	}); err != nil {
 		return saveResult{}, err
 	}
 
-	return saveResult{Page: saved, EmbeddingDuration: embeddingDuration}, nil
+	return saveResult{Page: saved}, nil
+}
+
+func (s *Scraper) logInfo(msg string, args ...any) {
+	if s.logger == nil {
+		return
+	}
+	s.logger.Info(msg, args...)
 }
 
 func (s *Scraper) deletePagesForUnconfiguredHosts() error {

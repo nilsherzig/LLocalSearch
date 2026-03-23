@@ -46,8 +46,64 @@
       margin: 12px 0 4px;
       color: var(--accent);
     }
+    .hero-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin: 20px 0 10px;
+    }
+    .metric-tile {
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #fbf8f1 0%, #f1e7d8 100%);
+      border: 1px solid var(--border);
+    }
+    .metric-label {
+      font-size: 0.88rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
     .muted {
       color: var(--muted);
+    }
+    .progress-card {
+      margin: 18px 0 22px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #f6f1e6 0%, #efe6d7 100%);
+      border: 1px solid var(--border);
+    }
+    .progress-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .progress-label {
+      font-size: 0.95rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .progress-value {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .progress-track {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: #e4dccf;
+      overflow: hidden;
+      box-shadow: inset 0 1px 3px rgba(29, 29, 27, 0.12);
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #b35c2e 0%, #1c6e5b 100%);
     }
     ul {
       padding-left: 20px;
@@ -64,9 +120,29 @@
   <main>
     <section class="hero">
       <p class="muted">LLocalSearch</p>
-      <h1>{{.TotalPages}} scraped pages</h1>
-      <p class="metric">{{.TotalPages}}</p>
+      <h1>Scraped and embedded pages</h1>
+      <div class="hero-metrics">
+        <div class="metric-tile">
+          <div class="metric-label">Scraped pages</div>
+          <p class="metric">{{.TotalPages}}</p>
+          <p class="muted">{{.TotalPages}} scraped pages</p>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">Embedded pages</div>
+          <p class="metric">{{.EmbeddedPages}}</p>
+          <p class="muted">{{.EmbeddedPages}} embedded pages</p>
+        </div>
+      </div>
       <p class="muted">Latest scrape: {{.LatestScraped}}</p>
+      <div class="progress-card">
+        <div class="progress-head">
+          <span class="progress-label">Embedding coverage</span>
+          <span class="progress-value">{{.EmbeddedPages}} of {{.TotalPages}} pages embedded</span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-label="Embedded pages" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{.EmbeddingProgress}}">
+          <div class="progress-fill" style="width: {{.EmbeddingProgress}}%;"></div>
+        </div>
+      </div>
       <form action="/search" method="get">
         <label for="q">Search downloaded pages</label>
         <div style="display:flex; gap:12px; margin-top:10px; flex-wrap:wrap;">

@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nilsherzig/llocalsearch/vectorstore"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -217,14 +216,8 @@ func TestNewDeletesPagesForHostsRemovedFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load vector row ids: %v", err)
 	}
-	if len(vectorRowIDs) != 1 {
-		t.Fatalf("expected one vector row after startup cleanup, got %d", len(vectorRowIDs))
-	}
-	if vectorRowIDs[0] != int64(keepResult.Page.ID) {
-		t.Fatalf("expected vector row for kept page id %d, got %d", keepResult.Page.ID, vectorRowIDs[0])
-	}
-	if vectorRowIDs[0] == int64(removeResult.Page.ID) {
-		t.Fatalf("expected vector row for removed page id %d to be deleted", removeResult.Page.ID)
+	if len(vectorRowIDs) != 0 {
+		t.Fatalf("expected no embedding rows after startup cleanup, got %d", len(vectorRowIDs))
 	}
 }
 
@@ -769,18 +762,12 @@ func TestSavePageRecordReplacesOlderSavedVersionWhenContentHashChanges(t *testin
 	if err != nil {
 		t.Fatalf("load vector row ids: %v", err)
 	}
-	if len(vectorRowIDs) != 1 {
-		t.Fatalf("expected one vector row after replacement, got %d", len(vectorRowIDs))
-	}
-	if vectorRowIDs[0] != int64(secondPage.ID) {
-		t.Fatalf("expected vector row for new page id %d, got %d", secondPage.ID, vectorRowIDs[0])
-	}
-	if vectorRowIDs[0] == int64(firstPage.ID) {
-		t.Fatalf("expected old vector row for page id %d to be removed", firstPage.ID)
+	if len(vectorRowIDs) != 0 {
+		t.Fatalf("expected no embedding rows after replacement, got %d", len(vectorRowIDs))
 	}
 }
 
-func TestSavePageRecordStoresEmbeddingVector(t *testing.T) {
+func TestSavePageRecordDoesNotStoreEmbeddingVector(t *testing.T) {
 	tempDir := t.TempDir()
 	cacheDir := filepath.Join(tempDir, "cache")
 
@@ -797,32 +784,28 @@ func TestSavePageRecordStoresEmbeddingVector(t *testing.T) {
 		t.Fatalf("parse url: %v", err)
 	}
 
-	result, err := s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>vector body</p></article>", "readability")
+	_, err = s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>vector body</p></article>", "readability")
 	if err != nil {
 		t.Fatalf("savePageRecord returned error: %v", err)
 	}
-	page := result.Page
 
 	vectorRowIDs, err := loadVectorRowIDs(filepath.Join(cacheDir, "pages.db"))
 	if err != nil {
 		t.Fatalf("load vector row ids: %v", err)
 	}
-	if len(vectorRowIDs) != 1 {
-		t.Fatalf("expected one vector row, got %d", len(vectorRowIDs))
-	}
-	if vectorRowIDs[0] != int64(page.ID) {
-		t.Fatalf("expected vector row for page id %d, got %d", page.ID, vectorRowIDs[0])
+	if len(vectorRowIDs) != 0 {
+		t.Fatalf("expected no vector rows, got %d", len(vectorRowIDs))
 	}
 }
 
-func TestSavePageRecordFailsWhenEmbeddingFails(t *testing.T) {
+func TestSavePageRecordPersistsPageWithoutEmbedding(t *testing.T) {
 	tempDir := t.TempDir()
 	cacheDir := filepath.Join(tempDir, "cache")
 
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{"https://example.com"},
-	}, WithEmbedder(staticEmbedder{err: fmt.Errorf("embed failed")}))
+	})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -832,337 +815,28 @@ func TestSavePageRecordFailsWhenEmbeddingFails(t *testing.T) {
 		t.Fatalf("parse url: %v", err)
 	}
 
-	if _, err := s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>vector body</p></article>", "readability"); err == nil {
-		t.Fatal("expected embedding error")
+	result, err := s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>vector body</p></article>", "readability")
+	if err != nil {
+		t.Fatalf("savePageRecord returned error: %v", err)
 	}
 
 	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
 	if err != nil {
 		t.Fatalf("load pages from db: %v", err)
 	}
-	if len(dbPages) != 0 {
-		t.Fatalf("expected no saved pages after embedding failure, got %d", len(dbPages))
+	if len(dbPages) != 1 {
+		t.Fatalf("expected one saved page, got %d", len(dbPages))
 	}
-}
+	if dbPages[0].ID != result.Page.ID {
+		t.Fatalf("expected saved page id %d, got %d", result.Page.ID, dbPages[0].ID)
+	}
 
-func TestSavePageRecordSerializesEmbeddingRequestsThroughWorker(t *testing.T) {
-	tempDir := t.TempDir()
-	cacheDir := filepath.Join(tempDir, "cache")
-	embedder := newBlockingEmbedder()
-
-	s, err := New(Config{
-		CacheDir: cacheDir,
-		Websites: []string{"https://example.com"},
-		Embeddings: EmbeddingConfig{
-			QueueSize: 4,
-			BatchSize: 1,
-		},
-	}, WithEmbedder(embedder))
+	vectorRowIDs, err := loadVectorRowIDs(filepath.Join(cacheDir, "pages.db"))
 	if err != nil {
-		t.Fatalf("New returned error: %v", err)
+		t.Fatalf("load vector row ids: %v", err)
 	}
-
-	pageURL, err := url.Parse("https://example.com/article")
-	if err != nil {
-		t.Fatalf("parse url: %v", err)
-	}
-
-	errs := make(chan error, 3)
-	for i := 0; i < 3; i++ {
-		content := fmt.Sprintf("<article><p>body-%d</p></article>", i)
-		go func(content string) {
-			_, err := s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), content, "readability")
-			errs <- err
-		}(content)
-	}
-
-	for i := 0; i < 3; i++ {
-		select {
-		case <-embedder.started:
-		case <-time.After(2 * time.Second):
-			t.Fatalf("expected embedding job %d to start", i+1)
-		}
-		if embedder.MaxConcurrent() != 1 {
-			t.Fatalf("expected max concurrent embeddings to stay at 1, got %d", embedder.MaxConcurrent())
-		}
-		embedder.release <- struct{}{}
-	}
-
-	for i := 0; i < 3; i++ {
-		select {
-		case err := <-errs:
-			if err != nil {
-				t.Fatalf("savePageRecord returned error: %v", err)
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatal("savePageRecord did not complete")
-		}
-	}
-
-	if embedder.MaxConcurrent() != 1 {
-		t.Fatalf("expected only one concurrent embedding, got %d", embedder.MaxConcurrent())
-	}
-}
-
-func TestSavePageRecordBlocksWhenEmbeddingQueueIsFull(t *testing.T) {
-	tempDir := t.TempDir()
-	cacheDir := filepath.Join(tempDir, "cache")
-	embedder := newBlockingEmbedder()
-
-	s, err := New(Config{
-		CacheDir: cacheDir,
-		Websites: []string{"https://example.com"},
-		Embeddings: EmbeddingConfig{
-			QueueSize: 1,
-			BatchSize: 1,
-		},
-	}, WithEmbedder(embedder))
-	if err != nil {
-		t.Fatalf("New returned error: %v", err)
-	}
-
-	firstURL, err := url.Parse("https://example.com/first")
-	if err != nil {
-		t.Fatalf("parse first url: %v", err)
-	}
-	secondURL, err := url.Parse("https://example.com/second")
-	if err != nil {
-		t.Fatalf("parse second url: %v", err)
-	}
-	thirdURL, err := url.Parse("https://example.com/third")
-	if err != nil {
-		t.Fatalf("parse third url: %v", err)
-	}
-
-	errs := make(chan error, 3)
-	go func() {
-		_, err := s.savePageRecord(firstURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>first</p></article>", "readability")
-		errs <- err
-	}()
-
-	select {
-	case <-embedder.started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected first embedding to start")
-	}
-
-	go func() {
-		_, err := s.savePageRecord(secondURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>second</p></article>", "readability")
-		errs <- err
-	}()
-
-	waitForCondition(t, 2*time.Second, func() bool {
-		return len(s.saveQueue) == 1
-	}, "expected second save to fill queue buffer")
-
-	thirdReturned := make(chan struct{})
-	go func() {
-		_, err := s.savePageRecord(thirdURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>third</p></article>", "readability")
-		errs <- err
-		close(thirdReturned)
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-	if len(s.saveQueue) != 1 {
-		t.Fatalf("expected full queue to stay at size 1, got %d", len(s.saveQueue))
-	}
-	select {
-	case <-thirdReturned:
-		t.Fatal("expected third save to block while queue is full")
-	default:
-	}
-
-	embedder.release <- struct{}{}
-	select {
-	case <-embedder.started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected second embedding to start after releasing first")
-	}
-
-	waitForCondition(t, 2*time.Second, func() bool {
-		return len(s.saveQueue) == 1
-	}, "expected third save to enqueue after queue space becomes available")
-
-	embedder.release <- struct{}{}
-	select {
-	case <-embedder.started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected third embedding to start after releasing second")
-	}
-
-	embedder.release <- struct{}{}
-
-	for i := 0; i < 3; i++ {
-		select {
-		case err := <-errs:
-			if err != nil {
-				t.Fatalf("savePageRecord returned error: %v", err)
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatal("expected all queued saves to complete")
-		}
-	}
-}
-
-func TestRunSaveWorkerBatchesEmbeddingRequestsUpToConfiguredBatchSize(t *testing.T) {
-	tempDir := t.TempDir()
-	cacheDir := filepath.Join(tempDir, "cache")
-	embedder := &recordingBatchEmbedder{}
-
-	db, err := vectorstore.Open(filepath.Join(cacheDir, "pages.db"))
-	if err != nil {
-		t.Fatalf("open vector store: %v", err)
-	}
-	if err := db.AutoMigrate(&SavedPage{}); err != nil {
-		t.Fatalf("migrate saved pages: %v", err)
-	}
-	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 2560); err != nil {
-		t.Fatalf("ensure schema: %v", err)
-	}
-
-	saveQueue := make(chan saveRequest, 3)
-	s := &Scraper{
-		db:                 db,
-		embedder:           embedder,
-		saveQueue:          saveQueue,
-		embeddingBatchSize: 2,
-	}
-
-	requests := []saveRequest{
-		newSaveRequest(t, "https://example.com/one", "<article><p>one</p></article>"),
-		newSaveRequest(t, "https://example.com/two", "<article><p>two</p></article>"),
-		newSaveRequest(t, "https://example.com/three", "<article><p>three</p></article>"),
-	}
-	for _, request := range requests {
-		saveQueue <- request
-	}
-	close(saveQueue)
-
-	done := make(chan struct{})
-	go func() {
-		s.runSaveWorker()
-		close(done)
-	}()
-
-	for _, request := range requests {
-		response := <-request.result
-		if response.err != nil {
-			t.Fatalf("runSaveWorker returned error: %v", response.err)
-		}
-		if response.result.Page.ID == 0 {
-			t.Fatal("expected saved page id to be set")
-		}
-	}
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("worker did not exit after queue close")
-	}
-
-	callSizes := embedder.CallSizes()
-	if !slices.Equal(callSizes, []int{2, 1}) {
-		t.Fatalf("expected embed batch sizes [2 1], got %v", callSizes)
-	}
-}
-
-func TestProcessSaveBatchLogsEmbeddingLifecycle(t *testing.T) {
-	tempDir := t.TempDir()
-	cacheDir := filepath.Join(tempDir, "cache")
-
-	db, err := vectorstore.Open(filepath.Join(cacheDir, "pages.db"))
-	if err != nil {
-		t.Fatalf("open vector store: %v", err)
-	}
-	if err := db.AutoMigrate(&SavedPage{}); err != nil {
-		t.Fatalf("migrate saved pages: %v", err)
-	}
-	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 2560); err != nil {
-		t.Fatalf("ensure schema: %v", err)
-	}
-
-	var logOutput bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logOutput, nil))
-
-	requests := []saveRequest{
-		newSaveRequest(t, "https://example.com/one", "<article><p>one</p></article>"),
-		newSaveRequest(t, "https://example.com/two", "<article><p>two</p></article>"),
-	}
-
-	s := &Scraper{
-		db:       db,
-		embedder: staticEmbedder{},
-		logger:   logger,
-	}
-
-	s.processSaveBatch(requests)
-
-	for _, request := range requests {
-		response := <-request.result
-		if response.err != nil {
-			t.Fatalf("processSaveBatch returned error: %v", response.err)
-		}
-	}
-
-	logs := logOutput.String()
-	if !strings.Contains(logs, `msg="embedding batch started"`) {
-		t.Fatalf("expected start log, got %q", logs)
-	}
-	if !strings.Contains(logs, `queued=2`) {
-		t.Fatalf("expected queued count in logs, got %q", logs)
-	}
-	if !strings.Contains(logs, `to_embed=2`) {
-		t.Fatalf("expected to_embed count in logs, got %q", logs)
-	}
-	if !strings.Contains(logs, `msg="embedding batch finished"`) {
-		t.Fatalf("expected finish log, got %q", logs)
-	}
-}
-
-func TestProcessSaveBatchLogsEmbeddingFailure(t *testing.T) {
-	tempDir := t.TempDir()
-	cacheDir := filepath.Join(tempDir, "cache")
-
-	db, err := vectorstore.Open(filepath.Join(cacheDir, "pages.db"))
-	if err != nil {
-		t.Fatalf("open vector store: %v", err)
-	}
-	if err := db.AutoMigrate(&SavedPage{}); err != nil {
-		t.Fatalf("migrate saved pages: %v", err)
-	}
-	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 2560); err != nil {
-		t.Fatalf("ensure schema: %v", err)
-	}
-
-	var logOutput bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logOutput, nil))
-
-	requests := []saveRequest{
-		newSaveRequest(t, "https://example.com/one", "<article><p>one</p></article>"),
-	}
-
-	s := &Scraper{
-		db:       db,
-		embedder: staticEmbedder{err: fmt.Errorf("embed failed")},
-		logger:   logger,
-	}
-
-	s.processSaveBatch(requests)
-
-	response := <-requests[0].result
-	if response.err == nil {
-		t.Fatal("expected processSaveBatch to return an error")
-	}
-
-	logs := logOutput.String()
-	if !strings.Contains(logs, `msg="embedding batch started"`) {
-		t.Fatalf("expected start log, got %q", logs)
-	}
-	if !strings.Contains(logs, `msg="embedding batch failed"`) {
-		t.Fatalf("expected failure log, got %q", logs)
-	}
-	if !strings.Contains(logs, "embed failed") {
-		t.Fatalf("expected embed error in logs, got %q", logs)
+	if len(vectorRowIDs) != 0 {
+		t.Fatalf("expected no embedding rows, got %d", len(vectorRowIDs))
 	}
 }
 
@@ -1712,6 +1386,9 @@ func loadVectorRowIDs(path string) ([]int64, error) {
 
 	rows, err := db.Query(`select rowid from page_embeddings order by rowid asc`)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no such table: page_embeddings") {
+			return nil, nil
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -1766,19 +1443,6 @@ type staticEmbedder struct {
 	err     error
 }
 
-type recordingBatchEmbedder struct {
-	mu    sync.Mutex
-	calls [][]string
-}
-
-type blockingEmbedder struct {
-	started       chan string
-	release       chan struct{}
-	mu            sync.Mutex
-	active        int
-	maxConcurrent int
-}
-
 type recordingSessionObserver struct {
 	events   []SessionPageEvent
 	failures []SessionFailureEvent
@@ -1807,95 +1471,6 @@ func (s staticEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, 
 		result = append(result, append([]float32(nil), vectors[i%len(vectors)]...))
 	}
 	return result, nil
-}
-
-func (r *recordingBatchEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
-	r.mu.Lock()
-	r.calls = append(r.calls, append([]string(nil), inputs...))
-	r.mu.Unlock()
-
-	result := make([][]float32, 0, len(inputs))
-	for i := range inputs {
-		result = append(result, testVectorWithLead(float32(i+1), 0.2, 0.3))
-	}
-	return result, nil
-}
-
-func (r *recordingBatchEmbedder) CallSizes() []int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	sizes := make([]int, 0, len(r.calls))
-	for _, call := range r.calls {
-		sizes = append(sizes, len(call))
-	}
-	return sizes
-}
-
-func newBlockingEmbedder() *blockingEmbedder {
-	return &blockingEmbedder{
-		started: make(chan string, 16),
-		release: make(chan struct{}, 16),
-	}
-}
-
-func (b *blockingEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
-	b.mu.Lock()
-	b.active++
-	if b.active > b.maxConcurrent {
-		b.maxConcurrent = b.active
-	}
-	b.mu.Unlock()
-
-	if len(inputs) > 0 {
-		b.started <- inputs[0]
-	} else {
-		b.started <- ""
-	}
-	<-b.release
-
-	b.mu.Lock()
-	b.active--
-	b.mu.Unlock()
-
-	return [][]float32{testVectorWithLead(0.4, 0.5, 0.6)}, nil
-}
-
-func (b *blockingEmbedder) MaxConcurrent() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.maxConcurrent
-}
-
-func waitForCondition(t *testing.T, timeout time.Duration, check func() bool, message string) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if check() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	t.Fatal(message)
-}
-
-func newSaveRequest(t *testing.T, rawURL string, content string) saveRequest {
-	t.Helper()
-
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		t.Fatalf("parse url %q: %v", rawURL, err)
-	}
-
-	return saveRequest{
-		parsedURL:  parsedURL,
-		scrapeTime: time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC),
-		content:    content,
-		parseMode:  "readability",
-		result:     make(chan saveResponse, 1),
-	}
 }
 
 func testVectorWithLead(values ...float32) []float32 {

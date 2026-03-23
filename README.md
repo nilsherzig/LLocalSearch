@@ -2,6 +2,44 @@
 
 LLocalSearch scrapes configured websites, stores cleaned page content locally, and exposes a frontend search server.
 
+## Subcommands
+
+The main entrypoint is `llocalsearch` with three operating modes:
+
+- `llocalsearch scrape -config scraper.example.yaml`
+  Scrapes the configured websites and writes cleaned pages directly to `saved_pages` in the SQLite database. This mode does not generate embeddings.
+- `llocalsearch embed -config scraper.example.yaml`
+  Runs the manual embedding backfill job. It finds all scraped pages that do not yet have an embedding and writes their vectors to `page_embeddings`.
+- `llocalsearch web -config scraper.example.yaml`
+  Starts the frontend and search server on `:8080` by default. The dashboard shows scrape counts and current embedding coverage.
+
+Typical flow:
+
+```sh
+go run ./cmd/llocalsearch scrape -config scraper.example.yaml
+go run ./cmd/llocalsearch embed -config scraper.example.yaml
+go run ./cmd/llocalsearch web -config scraper.example.yaml
+```
+
+`web` and search require a valid `embeddings` configuration because query embeddings are generated at request time. `scrape` can run without any embedding configuration.
+
+## Make Targets
+
+Convenience targets:
+
+- `make scrape`
+- `make embed`
+- `make web`
+- `make start-ollama`
+
+Override defaults if needed:
+
+```sh
+make scrape CONFIG=./my-config.yaml
+make web CONFIG=./my-config.yaml ADDR=:9090
+make web TEMPLATES_DIR=./frontend/templates
+```
+
 ## Search API
 
 The frontend server now exposes a JSON search endpoint alongside the HTML UI:
