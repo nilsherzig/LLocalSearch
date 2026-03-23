@@ -29,7 +29,7 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
-	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nembeddings:\n  base_url: http://localhost:11434\n  model: qwen3-embedding\n  dimensions: 2560\n  timeout: 3s\n  queue_size: 7\n  batch_size: 5\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
+	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nallowed_languages:\n  - en\n  - de\nembeddings:\n  base_url: http://localhost:11434\n  model: qwen3-embedding\n  dimensions: 2560\n  timeout: 3s\n  queue_size: 7\n  batch_size: 5\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
 
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -69,6 +69,9 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 	if !slices.Equal(cfg.Websites, wantWebsites) {
 		t.Fatalf("unexpected websites %v", cfg.Websites)
 	}
+	if !slices.Equal(cfg.AllowedLanguages, []string{"en", "de"}) {
+		t.Fatalf("unexpected allowed languages %v", cfg.AllowedLanguages)
+	}
 }
 
 func TestNormalizeConfigDefaultsEmbeddingWorkerSettings(t *testing.T) {
@@ -91,6 +94,45 @@ func TestNormalizeConfigDefaultsEmbeddingWorkerSettings(t *testing.T) {
 	if cfg.Embeddings.BatchSize != 8 {
 		t.Fatalf("expected default batch size 8, got %d", cfg.Embeddings.BatchSize)
 	}
+	if !slices.Equal(cfg.AllowedLanguages, []string{"en"}) {
+		t.Fatalf("expected default allowed languages [en], got %v", cfg.AllowedLanguages)
+	}
+}
+
+func TestNormalizeConfigPreservesExplicitlyDisabledLanguageFilter(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := normalizeConfig(Config{
+		CacheDir:         t.TempDir(),
+		AllowedLanguages: []string{},
+		Websites:         []string{"https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("normalizeConfig returned error: %v", err)
+	}
+
+	if cfg.AllowedLanguages == nil {
+		t.Fatal("expected explicit empty language filter to be preserved")
+	}
+	if len(cfg.AllowedLanguages) != 0 {
+		t.Fatalf("expected disabled language filter, got %v", cfg.AllowedLanguages)
+	}
+}
+
+func TestNormalizeConfigStripsURLFragmentsFromWebsiteTargets(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := normalizeConfig(Config{
+		CacheDir: t.TempDir(),
+		Websites: []string{"https://docs.k3s.io/cli/token#token-format"},
+	})
+	if err != nil {
+		t.Fatalf("normalizeConfig returned error: %v", err)
+	}
+
+	if !slices.Equal(cfg.Websites, []string{"https://docs.k3s.io/cli/token"}) {
+		t.Fatalf("expected fragment-free website target, got %v", cfg.Websites)
+	}
 }
 
 func TestNewUsesHostDelayFromConfig(t *testing.T) {
@@ -107,6 +149,82 @@ func TestNewUsesHostDelayFromConfig(t *testing.T) {
 
 	if s.hostDelay != 75*time.Millisecond {
 		t.Fatalf("unexpected host delay %v", s.hostDelay)
+	}
+}
+
+func TestNewDeletesPagesForHostsRemovedFromConfig(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://keep.example", "https://remove.example"},
+	}, WithEmbedder(staticEmbedder{
+		vectors: [][]float32{
+			testVectorWithLead(0.1, 0.2, 0.3),
+			testVectorWithLead(0.4, 0.5, 0.6),
+		},
+	}))
+	if err != nil {
+		t.Fatalf("first New returned error: %v", err)
+	}
+
+	keepURL, err := url.Parse("https://keep.example/guide")
+	if err != nil {
+		t.Fatalf("parse keep url: %v", err)
+	}
+	removeURL, err := url.Parse("https://remove.example/manual")
+	if err != nil {
+		t.Fatalf("parse remove url: %v", err)
+	}
+
+	keepResult, err := s.savePageRecord(keepURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>keep</p></article>", "readability")
+	if err != nil {
+		t.Fatalf("save keep page: %v", err)
+	}
+	removeResult, err := s.savePageRecord(removeURL, time.Date(2026, 3, 23, 10, 12, 12, 0, time.UTC), "<article><p>remove</p></article>", "readability")
+	if err != nil {
+		t.Fatalf("save removed page: %v", err)
+	}
+
+	_, err = New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://keep.example"},
+	}, WithEmbedder(staticEmbedder{}))
+	if err != nil {
+		t.Fatalf("second New returned error: %v", err)
+	}
+
+	pages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("expected one page after startup cleanup, got %d", len(pages))
+	}
+	if pages[0].ID != keepResult.Page.ID {
+		t.Fatalf("expected kept page id %d, got %d", keepResult.Page.ID, pages[0].ID)
+	}
+	if pages[0].ID == removeResult.Page.ID {
+		t.Fatalf("expected removed page id %d to be deleted", removeResult.Page.ID)
+	}
+	if pages[0].URL != keepURL.String() {
+		t.Fatalf("expected kept page url %q, got %q", keepURL.String(), pages[0].URL)
+	}
+
+	vectorRowIDs, err := loadVectorRowIDs(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load vector row ids: %v", err)
+	}
+	if len(vectorRowIDs) != 1 {
+		t.Fatalf("expected one vector row after startup cleanup, got %d", len(vectorRowIDs))
+	}
+	if vectorRowIDs[0] != int64(keepResult.Page.ID) {
+		t.Fatalf("expected vector row for kept page id %d, got %d", keepResult.Page.ID, vectorRowIDs[0])
+	}
+	if vectorRowIDs[0] == int64(removeResult.Page.ID) {
+		t.Fatalf("expected vector row for removed page id %d to be deleted", removeResult.Page.ID)
 	}
 }
 
@@ -268,6 +386,55 @@ func TestFetchWaitsBetweenRequestsToSameHost(t *testing.T) {
 	gotDelay := requestTimes[1].Sub(requestTimes[0])
 	if gotDelay < delay-(10*time.Millisecond) {
 		t.Fatalf("expected at least %v delay between same-host requests, got %v", delay, gotDelay)
+	}
+}
+
+func TestFetchDoesNotFollowAnchorLinksAsSeparatePages(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	requestsByPath := make(map[string]int)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestsByPath[r.URL.Path]++
+
+		switch r.URL.Path {
+		case "/cli/token":
+			_, _ = w.Write([]byte(`<html><body><article><p>token page</p><a href="#token-format">anchor</a></article></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	startURL := server.URL + "/cli/token"
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{startURL},
+	}, WithEmbedder(staticEmbedder{}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(startURL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("expected one saved page, got %d", len(pages))
+	}
+	if pages[0].URL != startURL {
+		t.Fatalf("expected saved url %q, got %q", startURL, pages[0].URL)
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(dbPages) != 1 {
+		t.Fatalf("expected one stored page, got %d", len(dbPages))
+	}
+	if got := requestsByPath["/cli/token"]; got != 1 {
+		t.Fatalf("expected anchor link not to trigger another request, got %d requests", got)
 	}
 }
 
@@ -1112,6 +1279,131 @@ func TestFetchFollowsURLs(t *testing.T) {
 	}
 }
 
+func TestFetchOnlyFollowsHTMLLinks(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	pdfRequests := 0
+	htmlRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`<html><body><article><p>root-page</p><a href="/next.html">next</a><a href="/manual.pdf">manual</a></article></body></html>`))
+		case "/next.html":
+			htmlRequests++
+			_, _ = w.Write([]byte(`<html><body><article><p>child-page</p></article></body></html>`))
+		case "/manual.pdf":
+			pdfRequests++
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write([]byte("%PDF-1.4 fake pdf"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{server.URL},
+	}, WithEmbedder(staticEmbedder{}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+
+	if len(pages) != 2 {
+		t.Fatalf("expected only html pages to be saved, got %d", len(pages))
+	}
+	if htmlRequests != 1 {
+		t.Fatalf("expected html child to be requested once, got %d", htmlRequests)
+	}
+	if pdfRequests != 0 {
+		t.Fatalf("expected pdf link not to be requested, got %d", pdfRequests)
+	}
+}
+
+func TestFetchDoesNotFollowLinksWithQueryParameters(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	queryRequests := 0
+	cleanRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/" && r.URL.RawQuery == "":
+			_, _ = w.Write([]byte(`<html><body><article><p>root-page</p><a href="/next?login=1">query-link</a><a href="/clean">clean-link</a></article></body></html>`))
+		case r.URL.Path == "/next" && r.URL.RawQuery == "login=1":
+			queryRequests++
+			_, _ = w.Write([]byte(`<html><body><article><p>query-page</p></article></body></html>`))
+		case r.URL.Path == "/clean" && r.URL.RawQuery == "":
+			cleanRequests++
+			_, _ = w.Write([]byte(`<html><body><article><p>clean-page</p></article></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{server.URL},
+	}, WithEmbedder(staticEmbedder{}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+
+	if len(pages) != 2 {
+		t.Fatalf("expected only root and clean pages to be saved, got %d", len(pages))
+	}
+	if cleanRequests != 1 {
+		t.Fatalf("expected clean link to be requested once, got %d", cleanRequests)
+	}
+	if queryRequests != 0 {
+		t.Fatalf("expected query-parameter link not to be requested, got %d", queryRequests)
+	}
+}
+
+func TestFetchSkipsSeedURLsWithQueryParameters(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`<html><body><article><p>query-seed</p></article></body></html>`))
+	}))
+	defer server.Close()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{server.URL},
+	}, WithEmbedder(staticEmbedder{}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL + "?login=1")
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+
+	if len(pages) != 0 {
+		t.Fatalf("expected query-parameter seed url to be skipped, got %d saved pages", len(pages))
+	}
+	if requests != 0 {
+		t.Fatalf("expected query-parameter seed url not to be requested, got %d", requests)
+	}
+}
+
 func TestFetchLogsActionsWithoutHTMLContent(t *testing.T) {
 	tempDir := t.TempDir()
 	cacheDir := filepath.Join(tempDir, "cache")
@@ -1150,6 +1442,158 @@ func TestFetchLogsActionsWithoutHTMLContent(t *testing.T) {
 	}
 	if strings.Contains(logs, "skipping url outside whitelist") {
 		t.Fatalf("logs should not contain outside-whitelist skip message, got %q", logs)
+	}
+}
+
+func TestFetchSkipsNonHTMLResponses(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		_, _ = w.Write([]byte("%PDF-1.4 fake pdf"))
+	}))
+	defer server.Close()
+
+	s, err := New(
+		Config{
+			CacheDir: cacheDir,
+			Websites: []string{server.URL},
+		},
+		WithEmbedder(staticEmbedder{}),
+	)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	if len(pages) != 0 {
+		t.Fatalf("expected non-html response to be skipped, got %d saved pages", len(pages))
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(dbPages) != 0 {
+		t.Fatalf("expected no pages in db for non-html response, got %d", len(dbPages))
+	}
+}
+
+func TestFetchSkipsNonEnglishHTMLResponsesUsingLangMetadata(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	childRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`<html lang="de"><body><article><p>wurzel-seite</p><a href="/child">child</a></article></body></html>`))
+		case "/child":
+			childRequests++
+			_, _ = w.Write([]byte(`<html lang="en"><body><article><p>child-page</p></article></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	s, err := New(
+		Config{
+			CacheDir: cacheDir,
+			Websites: []string{server.URL},
+		},
+		WithEmbedder(staticEmbedder{}),
+	)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	if len(pages) != 0 {
+		t.Fatalf("expected non-english html response to be skipped, got %d saved pages", len(pages))
+	}
+	if childRequests != 0 {
+		t.Fatalf("expected links from non-english page not to be followed, got %d child requests", childRequests)
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(dbPages) != 0 {
+		t.Fatalf("expected no pages in db for non-english html response, got %d", len(dbPages))
+	}
+}
+
+func TestFetchKeepsEnglishHTMLResponsesUsingLangMetadata(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html lang="en-US"><body><article><p>english-page</p></article></body></html>`))
+	}))
+	defer server.Close()
+
+	s, err := New(
+		Config{
+			CacheDir: cacheDir,
+			Websites: []string{server.URL},
+		},
+		WithEmbedder(staticEmbedder{}),
+	)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("expected english html response to be saved, got %d pages", len(pages))
+	}
+	if !strings.Contains(pages[0].Content, "english-page") {
+		t.Fatalf("expected saved english page content, got %q", pages[0].Content)
+	}
+}
+
+func TestFetchAllowsConfiguredNonEnglishHTMLResponsesUsingLanguageFilter(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html lang="de-DE"><body><article><p>deutsche-seite</p></article></body></html>`))
+	}))
+	defer server.Close()
+
+	s, err := New(
+		Config{
+			CacheDir:         cacheDir,
+			AllowedLanguages: []string{"de"},
+			Websites:         []string{server.URL},
+		},
+		WithEmbedder(staticEmbedder{}),
+	)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("expected configured german html response to be saved, got %d pages", len(pages))
+	}
+	if !strings.Contains(pages[0].Content, "deutsche-seite") {
+		t.Fatalf("expected saved configured-language page content, got %q", pages[0].Content)
 	}
 }
 

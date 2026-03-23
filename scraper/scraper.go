@@ -9,9 +9,12 @@ import (
 	stdhtml "html"
 	"io"
 	"log/slog"
+	"mime"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -29,10 +32,11 @@ import (
 )
 
 type Config struct {
-	CacheDir   string          `yaml:"cache_dir"`
-	HostDelay  Duration        `yaml:"host_delay"`
-	Embeddings EmbeddingConfig `yaml:"embeddings"`
-	Websites   []string        `yaml:"websites"`
+	CacheDir         string          `yaml:"cache_dir"`
+	HostDelay        Duration        `yaml:"host_delay"`
+	AllowedLanguages []string        `yaml:"allowed_languages"`
+	Embeddings       EmbeddingConfig `yaml:"embeddings"`
+	Websites         []string        `yaml:"websites"`
 }
 
 type EmbeddingConfig struct {
@@ -79,16 +83,17 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type Scraper struct {
-	cacheDir  string
-	dbPath    string
-	websites  []string
-	logger    *slog.Logger
-	now       func() time.Time
-	hostDelay time.Duration
-	db        *gorm.DB
-	embedder  embedding.Client
-	observer  SessionObserver
-	saveQueue chan saveRequest
+	cacheDir         string
+	dbPath           string
+	websites         []string
+	allowedLanguages []string
+	logger           *slog.Logger
+	now              func() time.Time
+	hostDelay        time.Duration
+	db               *gorm.DB
+	embedder         embedding.Client
+	observer         SessionObserver
+	saveQueue        chan saveRequest
 
 	embeddingBatchSize int
 }
@@ -108,6 +113,48 @@ type SavedPage struct {
 }
 
 const firefoxUserAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0"
+const skippedLanguageContextKey = "skipped_language"
+
+var nonHTMLResourceExtensions = map[string]struct{}{
+	".7z":   {},
+	".avi":  {},
+	".bmp":  {},
+	".csv":  {},
+	".doc":  {},
+	".docx": {},
+	".epub": {},
+	".gif":  {},
+	".gz":   {},
+	".jpeg": {},
+	".jpg":  {},
+	".json": {},
+	".m4a":  {},
+	".mkv":  {},
+	".mov":  {},
+	".mp3":  {},
+	".mp4":  {},
+	".ods":  {},
+	".odt":  {},
+	".pdf":  {},
+	".png":  {},
+	".ppt":  {},
+	".pptx": {},
+	".rar":  {},
+	".rss":  {},
+	".svg":  {},
+	".tar":  {},
+	".tgz":  {},
+	".tif":  {},
+	".tiff": {},
+	".txt":  {},
+	".wav":  {},
+	".webm": {},
+	".webp": {},
+	".xls":  {},
+	".xlsx": {},
+	".xml":  {},
+	".zip":  {},
+}
 
 func LoadConfig(path string) (Config, error) {
 	data, err := os.ReadFile(path)
@@ -202,12 +249,13 @@ func New(cfg Config, opts ...Option) (*Scraper, error) {
 	}
 
 	s := &Scraper{
-		cacheDir:  normalized.CacheDir,
-		dbPath:    filepath.Join(normalized.CacheDir, "pages.db"),
-		websites:  allowedHosts,
-		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:       time.Now,
-		hostDelay: 500 * time.Millisecond,
+		cacheDir:         normalized.CacheDir,
+		dbPath:           filepath.Join(normalized.CacheDir, "pages.db"),
+		websites:         allowedHosts,
+		allowedLanguages: append([]string(nil), normalized.AllowedLanguages...),
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+		now:              time.Now,
+		hostDelay:        500 * time.Millisecond,
 	}
 	if normalized.HostDelay > 0 {
 		s.hostDelay = time.Duration(normalized.HostDelay)
@@ -237,6 +285,9 @@ func New(cfg Config, opts ...Option) (*Scraper, error) {
 		return nil, err
 	}
 	s.db = db
+	if err := s.deletePagesForUnconfiguredHosts(); err != nil {
+		return nil, err
+	}
 	s.saveQueue = make(chan saveRequest, normalized.Embeddings.QueueSize)
 	s.embeddingBatchSize = normalized.Embeddings.BatchSize
 	go s.runSaveWorker()
@@ -253,16 +304,19 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 		return nil, nil
 	}
 
+	normalizedRawURLs := make([]string, 0, len(rawURLs))
 	for _, rawURL := range rawURLs {
 		parsedURL, err := url.Parse(rawURL)
 		if err != nil {
 			return nil, fmt.Errorf("parse url: %w", err)
 		}
+		parsedURL = stripURLFragment(parsedURL)
 
 		host := normalizeHost(parsedURL.Hostname())
 		if !slices.Contains(s.websites, host) {
 			return nil, fmt.Errorf("host %q is not in whitelist", host)
 		}
+		normalizedRawURLs = append(normalizedRawURLs, parsedURL.String())
 	}
 
 	collector := colly.NewCollector(
@@ -287,6 +341,16 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 
 	collector.OnResponse(func(r *colly.Response) {
 		s.logger.Info("received response", "url", r.Request.URL.String(), "status", r.StatusCode, "bytes", len(r.Body))
+		if !isHTMLResponse(r.Headers.Get("Content-Type"), r.Body) {
+			s.logger.Info("skipping non-html response", "url", r.Request.URL.String(), "content_type", normalizedContentType(r.Headers.Get("Content-Type"), r.Body))
+			return
+		}
+		if lang, ok := htmlDocumentLanguage(r.Body); ok && !matchesAllowedLanguageTag(lang, s.allowedLanguages) {
+			r.Ctx.Put(skippedLanguageContextKey, lang)
+			s.logger.Info("skipping disallowed html response language", "url", r.Request.URL.String(), "lang", lang)
+			return
+		}
+
 		saveResult, err := s.saveReadablePage(r.Request.URL.String(), r.Body, scrapeTime)
 		if err != nil {
 			s.logger.Error("could not save page", "url", r.Request.URL.String(), "err", err)
@@ -341,8 +405,15 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 	})
 
 	collector.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		nextURL := e.Request.AbsoluteURL(e.Attr("href"))
+		if e.Request.Ctx.Get(skippedLanguageContextKey) != "" {
+			return
+		}
+
+		nextURL := stripURLFragmentString(e.Request.AbsoluteURL(e.Attr("href")))
 		if nextURL == "" {
+			return
+		}
+		if !shouldVisitURL(nextURL) {
 			return
 		}
 		nextHost := normalizeHost(mustHostname(nextURL))
@@ -358,7 +429,11 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 		}
 	})
 
-	for _, rawURL := range rawURLs {
+	for _, rawURL := range normalizedRawURLs {
+		if !shouldVisitURL(rawURL) {
+			s.logger.Info("skipping non-html url", "url", rawURL)
+			continue
+		}
 		s.logger.Info("starting crawl", "url", rawURL)
 		if err := collector.Visit(rawURL); err != nil {
 			if s.observer != nil {
@@ -402,10 +477,11 @@ func normalizeConfig(cfg Config) (Config, error) {
 	}
 
 	normalized := Config{
-		CacheDir:   cfg.CacheDir,
-		HostDelay:  cfg.HostDelay,
-		Embeddings: cfg.Embeddings,
-		Websites:   make([]string, 0, len(cfg.Websites)),
+		CacheDir:         cfg.CacheDir,
+		HostDelay:        cfg.HostDelay,
+		AllowedLanguages: nil,
+		Embeddings:       cfg.Embeddings,
+		Websites:         make([]string, 0, len(cfg.Websites)),
 	}
 
 	if normalized.CacheDir == "" {
@@ -422,6 +498,20 @@ func normalizeConfig(cfg Config) (Config, error) {
 	}
 	if normalized.Embeddings.BatchSize <= 0 {
 		normalized.Embeddings.BatchSize = 8
+	}
+	if cfg.AllowedLanguages == nil {
+		normalized.AllowedLanguages = []string{"en"}
+	} else {
+		normalized.AllowedLanguages = make([]string, 0, len(cfg.AllowedLanguages))
+		for _, lang := range cfg.AllowedLanguages {
+			normalizedLang := normalizeLanguageTag(lang)
+			if normalizedLang == "" {
+				return Config{}, errors.New("config contains empty allowed language entry")
+			}
+			if !slices.Contains(normalized.AllowedLanguages, normalizedLang) {
+				normalized.AllowedLanguages = append(normalized.AllowedLanguages, normalizedLang)
+			}
+		}
 	}
 
 	for _, website := range cfg.Websites {
@@ -451,6 +541,7 @@ func normalizeTarget(raw string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("parse website target %q: %w", raw, err)
 	}
+	parsed = stripURLFragment(parsed)
 
 	host := normalizeHost(parsed.Hostname())
 	if parsed.Scheme == "" || host == "" {
@@ -488,11 +579,108 @@ func mustHostname(rawURL string) string {
 	return parsed.Hostname()
 }
 
+func shouldVisitURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	parsed = stripURLFragment(parsed)
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return false
+	}
+
+	ext := strings.ToLower(path.Ext(parsed.Path))
+	if ext == "" {
+		return true
+	}
+
+	_, blocked := nonHTMLResourceExtensions[ext]
+	return !blocked
+}
+
+func isHTMLResponse(contentType string, body []byte) bool {
+	normalized := normalizedContentType(contentType, body)
+	return normalized == "text/html" || normalized == "application/xhtml+xml"
+}
+
+func normalizedContentType(contentType string, body []byte) string {
+	value := strings.TrimSpace(contentType)
+	if value == "" {
+		value = http.DetectContentType(body)
+	}
+
+	mediaType, _, err := mime.ParseMediaType(value)
+	if err != nil {
+		return strings.ToLower(value)
+	}
+
+	return strings.ToLower(mediaType)
+}
+
+func htmlDocumentLanguage(body []byte) (string, bool) {
+	tokenizer := htmlnode.NewTokenizer(bytes.NewReader(body))
+	for {
+		switch tokenizer.Next() {
+		case htmlnode.ErrorToken:
+			return "", false
+		case htmlnode.StartTagToken, htmlnode.SelfClosingTagToken:
+			token := tokenizer.Token()
+			if !strings.EqualFold(token.Data, "html") {
+				continue
+			}
+
+			for _, attr := range token.Attr {
+				if !strings.EqualFold(attr.Key, "lang") && !strings.EqualFold(attr.Key, "xml:lang") {
+					continue
+				}
+
+				lang := normalizeLanguageTag(attr.Val)
+				if lang == "" {
+					return "", false
+				}
+				return lang, true
+			}
+
+			return "", false
+		}
+	}
+}
+
+func normalizeLanguageTag(lang string) string {
+	return strings.ToLower(strings.TrimSpace(lang))
+}
+
+func matchesAllowedLanguageTag(lang string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+
+	normalized := normalizeLanguageTag(lang)
+	if normalized == "" {
+		return false
+	}
+
+	for _, candidate := range allowed {
+		allowedTag := normalizeLanguageTag(candidate)
+		if allowedTag == "" {
+			continue
+		}
+		if normalized == allowedTag ||
+			strings.HasPrefix(normalized, allowedTag+"-") ||
+			strings.HasPrefix(normalized, allowedTag+"_") {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (s *Scraper) saveReadablePage(pageURL string, body []byte, scrapeTime time.Time) (saveResult, error) {
 	parsedURL, err := url.ParseRequestURI(pageURL)
 	if err != nil {
 		return saveResult{}, fmt.Errorf("parse page url: %w", err)
 	}
+	parsedURL = stripURLFragment(parsedURL)
 
 	parser := readability.NewParser()
 	parser.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -699,6 +887,39 @@ func (s *Scraper) persistPreparedPage(page SavedPage, vector []float32, embeddin
 	return saveResult{Page: saved, EmbeddingDuration: embeddingDuration}, nil
 }
 
+func (s *Scraper) deletePagesForUnconfiguredHosts() error {
+	var pages []SavedPage
+	if err := s.db.Find(&pages).Error; err != nil {
+		return fmt.Errorf("load saved pages for startup cleanup: %w", err)
+	}
+
+	staleIDs := make([]uint, 0)
+	for _, page := range pages {
+		if slices.Contains(s.websites, savedPageHost(page)) {
+			continue
+		}
+		staleIDs = append(staleIDs, page.ID)
+	}
+	if len(staleIDs) == 0 {
+		return nil
+	}
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := vectorstore.DeleteEmbeddings(tx, staleIDs); err != nil {
+			return err
+		}
+		if err := tx.Delete(&SavedPage{}, staleIDs).Error; err != nil {
+			return fmt.Errorf("delete pages for unconfigured hosts: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	s.logInfo("deleted pages for unconfigured hosts", "pages", len(staleIDs))
+	return nil
+}
+
 func buildSavedPage(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) SavedPage {
 	contentHash := hashContent(content)
 
@@ -721,6 +942,32 @@ func cloneURL(source *url.URL) *url.URL {
 
 	cloned := *source
 	return &cloned
+}
+
+func stripURLFragment(source *url.URL) *url.URL {
+	if source == nil {
+		return nil
+	}
+
+	normalized := cloneURL(source)
+	normalized.Fragment = ""
+	return normalized
+}
+
+func stripURLFragmentString(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	return stripURLFragment(parsed).String()
+}
+
+func savedPageHost(page SavedPage) string {
+	if host := normalizeHost(page.Host); host != "" {
+		return host
+	}
+	return normalizeHost(mustHostname(page.URL))
 }
 
 func (s *Scraper) findSavedPage(pageURL string, contentHash string) (SavedPage, bool, error) {

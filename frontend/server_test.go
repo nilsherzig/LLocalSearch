@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -141,6 +142,112 @@ func TestSearchHandlerFindsFuzzyMatchesAcrossDownloadedPages(t *testing.T) {
 	if !strings.Contains(body, "clean article body") {
 		t.Fatalf("expected search snippet to include matched content, got %q", body)
 	}
+	if !strings.Contains(body, "Similarity: 1.0000") {
+		t.Fatalf("expected rendered similarity score, got %q", body)
+	}
+}
+
+func TestSearchAPIHandlerReturnsJSONResults(t *testing.T) {
+	server, dbPath := newTestServer(t)
+	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
+		t.Fatalf("insert first embedding: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 2, vectorWithLead(0, 1, 0)); err != nil {
+		t.Fatalf("insert second embedding: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 3, vectorWithLead(0, 0, 1)); err != nil {
+		t.Fatalf("insert third embedding: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=kubernetes+guide", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+
+	var response searchAPIResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if response.Query != "kubernetes guide" {
+		t.Fatalf("expected query in response, got %q", response.Query)
+	}
+	if len(response.Results) == 0 {
+		t.Fatalf("expected at least one search result, got %+v", response)
+	}
+	if response.Results[0].URL != "https://example.com/article" {
+		t.Fatalf("expected matched page url in response, got %q", response.Results[0].URL)
+	}
+	if response.Results[0].Excerpt != "clean article body" {
+		t.Fatalf("expected matched page excerpt in response, got %q", response.Results[0].Excerpt)
+	}
+	if response.Results[0].Similarity != 1 {
+		t.Fatalf("expected similarity 1 for exact vector match, got %v", response.Results[0].Similarity)
+	}
+}
+
+func TestPageContentAPIHandlerReturnsFullPageContent(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pages/1", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+
+	var response struct {
+		ID        uint      `json:"id"`
+		URL       string    `json:"url"`
+		Host      string    `json:"host"`
+		Path      string    `json:"path"`
+		ScrapedAt time.Time `json:"scraped_at"`
+		Content   string    `json:"content"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if response.ID != 1 {
+		t.Fatalf("expected page id 1, got %d", response.ID)
+	}
+	if response.URL != "https://example.com/article" {
+		t.Fatalf("expected page url in response, got %q", response.URL)
+	}
+	if response.Content != "<article><p>clean article body</p></article>" {
+		t.Fatalf("expected full page content in response, got %q", response.Content)
+	}
+}
+
+func TestPageContentAPIHandlerReturnsNotFoundForUnknownPage(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pages/999", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), `"error":"page not found"`) {
+		t.Fatalf("expected json not found body, got %q", rec.Body.String())
+	}
 }
 
 func TestSearchHandlerReturnsInternalServerErrorWhenEmbeddingFails(t *testing.T) {
@@ -153,6 +260,25 @@ func TestSearchHandlerReturnsInternalServerErrorWhenEmbeddingFails(t *testing.T)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("unexpected status %d", rec.Code)
+	}
+}
+
+func TestSearchAPIHandlerReturnsJSONErrorWhenEmbeddingFails(t *testing.T) {
+	server, _ := newTestServer(t, testEmbedder{err: context.DeadlineExceeded})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=test", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), `"error":"internal server error"`) {
+		t.Fatalf("expected json error body, got %q", rec.Body.String())
 	}
 }
 

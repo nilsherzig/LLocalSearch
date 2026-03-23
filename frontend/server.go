@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -63,13 +64,42 @@ type pageDetailData struct {
 }
 
 type searchResult struct {
-	Page    scraper.SavedPage
-	Excerpt string
+	Page       scraper.SavedPage
+	Excerpt    string
+	Similarity float64
 }
 
 type searchData struct {
 	Query   string
 	Results []searchResult
+}
+
+type searchAPIResponse struct {
+	Query   string                 `json:"query"`
+	Results []searchAPIResultEntry `json:"results"`
+}
+
+type searchAPIResultEntry struct {
+	ID         uint      `json:"id"`
+	URL        string    `json:"url"`
+	Host       string    `json:"host"`
+	Path       string    `json:"path"`
+	ScrapedAt  time.Time `json:"scraped_at"`
+	Excerpt    string    `json:"excerpt"`
+	Similarity float64   `json:"similarity"`
+}
+
+type pageAPIResponse struct {
+	ID        uint      `json:"id"`
+	URL       string    `json:"url"`
+	Host      string    `json:"host"`
+	Path      string    `json:"path"`
+	ScrapedAt time.Time `json:"scraped_at"`
+	Content   string    `json:"content"`
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -133,6 +163,8 @@ func NewServer(cfg Config) (*Server, error) {
 	server.mux.HandleFunc("/pages", server.handlePages)
 	server.mux.HandleFunc("/pages/", server.handlePageDetail)
 	server.mux.HandleFunc("/search", server.handleSearch)
+	server.mux.HandleFunc("/api/search", server.handleSearchAPI)
+	server.mux.HandleFunc("/api/pages/", server.handlePageContentAPI)
 
 	return server, nil
 }
@@ -271,21 +303,14 @@ func (s *Server) handlePages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePageDetail(w http.ResponseWriter, r *http.Request) {
-	idText := strings.TrimPrefix(r.URL.Path, "/pages/")
-	id, err := strconv.ParseUint(idText, 10, 64)
+	page, found, err := s.loadPageByPathID(r.URL.Path, "/pages/")
 	if err != nil {
-		http.NotFound(w, r)
+		s.logger.Error("load page failed", "path", r.URL.Path, "err", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	var page scraper.SavedPage
-	if err := s.db.First(&page, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			http.NotFound(w, r)
-			return
-		}
-		s.logger.Error("load page failed", "id", id, "err", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+	if !found {
+		http.NotFound(w, r)
 		return
 	}
 
@@ -321,6 +346,63 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("render search failed", "query", query, "err", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
+}
+
+func (s *Server) handleSearchAPI(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/search" {
+		http.NotFound(w, r)
+		return
+	}
+
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	results, err := s.searchPages(query)
+	if err != nil {
+		s.logger.Error("search api failed", "query", query, "err", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal server error"})
+		return
+	}
+
+	response := searchAPIResponse{
+		Query:   query,
+		Results: make([]searchAPIResultEntry, 0, len(results)),
+	}
+	for _, result := range results {
+		response.Results = append(response.Results, searchAPIResultEntry{
+			ID:         result.Page.ID,
+			URL:        result.Page.URL,
+			Host:       result.Page.Host,
+			Path:       result.Page.Path,
+			ScrapedAt:  result.Page.ScrapedAt,
+			Excerpt:    result.Excerpt,
+			Similarity: result.Similarity,
+		})
+	}
+
+	s.logger.Info("serve search api", "query", query, "results", len(response.Results))
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handlePageContentAPI(w http.ResponseWriter, r *http.Request) {
+	page, found, err := s.loadPageByPathID(r.URL.Path, "/api/pages/")
+	if err != nil {
+		s.logger.Error("load page api failed", "path", r.URL.Path, "err", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal server error"})
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "page not found"})
+		return
+	}
+
+	s.logger.Info("serve page api", "id", page.ID, "url", page.URL)
+	writeJSON(w, http.StatusOK, pageAPIResponse{
+		ID:        page.ID,
+		URL:       page.URL,
+		Host:      page.Host,
+		Path:      page.Path,
+		ScrapedAt: page.ScrapedAt,
+		Content:   page.Content,
+	})
 }
 
 func (s *Server) searchPages(query string) ([]searchResult, error) {
@@ -371,12 +453,42 @@ func (s *Server) searchPages(query string) ([]searchResult, error) {
 		}
 		plainContent := extractPlainText(page.Content)
 		results = append(results, searchResult{
-			Page:    page,
-			Excerpt: buildExcerpt(plainContent, query),
+			Page:       page,
+			Excerpt:    buildExcerpt(plainContent, query),
+			Similarity: similarityFromDistance(match.Distance),
 		})
 	}
 
 	return results, nil
+}
+
+func (s *Server) loadPageByPathID(path string, prefix string) (scraper.SavedPage, bool, error) {
+	idText := strings.TrimPrefix(path, prefix)
+	id, err := strconv.ParseUint(idText, 10, 64)
+	if err != nil {
+		return scraper.SavedPage{}, false, nil
+	}
+
+	var page scraper.SavedPage
+	if err := s.db.First(&page, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return scraper.SavedPage{}, false, nil
+		}
+		return scraper.SavedPage{}, false, err
+	}
+
+	return page, true, nil
+}
+
+func similarityFromDistance(distance float64) float64 {
+	similarity := 1 - distance
+	if similarity > 1 {
+		return 1
+	}
+	if similarity < -1 {
+		return -1
+	}
+	return similarity
 }
 
 func buildExcerpt(text string, query string) string {
@@ -426,5 +538,13 @@ func extractPlainText(content string) string {
 			}
 			builder.WriteString(text)
 		}
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }

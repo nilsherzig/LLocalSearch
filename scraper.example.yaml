@@ -1,6 +1,7 @@
 cache_dir: ./.cache/colly
-# host_delay: 1000ms
-host_delay: 200ms
+host_delay: 1000ms
+allowed_languages:
+  - en
 embeddings:
   base_url: http://localhost:11434
   # model: qwen3-embedding
@@ -9,8 +10,8 @@ embeddings:
   # model: nomic-embed-text-v2-moe
   # dimensions: 256
   timeout: 30s
-  queue_size: 8
-  batch_size: 2
+  queue_size: 2
+  batch_size: 1
 websites:
   - https://go-colly.org
   - https://book.kubebuilder.io
@@ -20,3 +21,4 @@ websites:
   - https://docs.k3s.io
   - https://kubernetes.io
   - https://docs.wiit-cloud.io
+  - https://gobyexample.com

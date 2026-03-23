@@ -92,7 +92,7 @@
           {{range .Results}}
           <article class="result">
             <h2><a href="/pages/{{.Page.ID}}">{{.Page.URL}}</a></h2>
-            <p class="muted">{{.Page.Host}}{{.Page.Path}} · scraped {{.Page.ScrapedAt.Format "2006-01-02 15:04:05 MST"}}</p>
+            <p class="muted">{{.Page.Host}}{{.Page.Path}} · scraped {{.Page.ScrapedAt.Format "2006-01-02 15:04:05 MST"}} · Similarity: {{printf "%.4f" .Similarity}}</p>
             <p>{{.Excerpt}}</p>
           </article>
           {{end}}
