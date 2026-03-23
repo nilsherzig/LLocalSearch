@@ -1,8 +1,10 @@
 cache_dir: ./.cache/colly
-host_delay: 1000ms
+host_delay: 500ms
 websites:
   - https://go-colly.org
   - https://book.kubebuilder.io
   - https://www.flatcar.org
   - https://wiki.nixos.org
   - https://ghostty.org
+  - https://docs.k3s.io
+  - https://kubernetes.io

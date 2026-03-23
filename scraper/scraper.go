@@ -247,7 +247,6 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 		}
 		nextHost := normalizeHost(mustHostname(nextURL))
 		if !slices.Contains(s.websites, nextHost) {
-			s.logger.Info("skipping url outside whitelist", "from", e.Request.URL.String(), "to", nextURL)
 			return
 		}
 

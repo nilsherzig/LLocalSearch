@@ -2,6 +2,8 @@ package scraper
 
 import (
 	"bytes"
+	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -221,6 +225,83 @@ func TestFetchWaitsBetweenRequestsToSameHost(t *testing.T) {
 	gotDelay := requestTimes[1].Sub(requestTimes[0])
 	if gotDelay < delay-(10*time.Millisecond) {
 		t.Fatalf("expected at least %v delay between same-host requests, got %v", delay, gotDelay)
+	}
+}
+
+func TestFetchRespectsHostDelayWhileFollowingManyDiscoveredLinks(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	delay := 25 * time.Millisecond
+	pageCount := 10
+
+	var (
+		mu           sync.Mutex
+		requestTimes []time.Time
+	)
+
+	pageLinks := make(map[string][]string, pageCount)
+	for i := 0; i < pageCount; i++ {
+		path := fmt.Sprintf("/page-%d", i)
+		pageLinks[path] = randomNextPaths(path, pageCount)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestTimes = append(requestTimes, time.Now())
+		mu.Unlock()
+
+		links, ok := pageLinks[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+
+		var body strings.Builder
+		body.WriteString(`<html><body><article><h1>`)
+		body.WriteString(r.URL.Path)
+		body.WriteString(`</h1><p>content</p>`)
+		for _, link := range links {
+			body.WriteString(`<a href="`)
+			body.WriteString(link)
+			body.WriteString(`">next</a>`)
+		}
+		body.WriteString(`</article></body></html>`)
+
+		_, _ = w.Write([]byte(body.String()))
+	}))
+	defer server.Close()
+
+	startURL := server.URL + "/page-0"
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{startURL},
+	}, WithHostDelay(delay))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(startURL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+	if len(pages) < 6 {
+		t.Fatalf("expected crawler to follow several discovered pages, got %d", len(pages))
+	}
+
+	mu.Lock()
+	gotTimes := append([]time.Time(nil), requestTimes...)
+	mu.Unlock()
+
+	if len(gotTimes) < 6 {
+		t.Fatalf("expected at least six requests, got %d", len(gotTimes))
+	}
+
+	minGap := delay - (8 * time.Millisecond)
+	for i := 1; i < len(gotTimes); i++ {
+		gap := gotTimes[i].Sub(gotTimes[i-1])
+		if gap < minGap {
+			t.Fatalf("expected at least %v between request %d and %d, got %v", minGap, i-1, i, gap)
+		}
 	}
 }
 
@@ -472,7 +553,7 @@ func TestFetchLogsActionsWithoutHTMLContent(t *testing.T) {
 	htmlBody := `<html><body>TOP-SECRET-HTML</body></html>`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(htmlBody))
+		_, _ = w.Write([]byte(htmlBody + `<a href="https://blocked.example/path">blocked</a>`))
 	}))
 	defer server.Close()
 
@@ -500,6 +581,9 @@ func TestFetchLogsActionsWithoutHTMLContent(t *testing.T) {
 	}
 	if strings.Contains(logs, "TOP-SECRET-HTML") {
 		t.Fatalf("logs should not contain html body, got %q", logs)
+	}
+	if strings.Contains(logs, "skipping url outside whitelist") {
+		t.Fatalf("logs should not contain outside-whitelist skip message, got %q", logs)
 	}
 }
 
@@ -620,4 +704,23 @@ func deeplyNestedHTML(depth int) string {
 	}
 	builder.WriteString("</body></html>")
 	return builder.String()
+}
+
+func randomNextPaths(path string, total int) []string {
+	indexText := strings.TrimPrefix(path, "/page-")
+	index, err := strconv.Atoi(indexText)
+	if err != nil || index >= total-1 {
+		return nil
+	}
+
+	links := []string{fmt.Sprintf("/page-%d", index+1)}
+	if index >= total-2 {
+		return links
+	}
+
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(path))
+	extraOffset := int(hasher.Sum32()%uint32(total-index-2)) + 2
+	links = append(links, fmt.Sprintf("/page-%d", index+extraOffset))
+	return links
 }
