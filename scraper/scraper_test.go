@@ -2,6 +2,8 @@ package scraper
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"fmt"
 	"hash/fnv"
 	"log/slog"
@@ -17,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nilsherzig/llocalsearch/vectorstore"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -26,7 +29,7 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
-	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
+	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nembeddings:\n  base_url: http://localhost:11434\n  model: qwen3-embedding\n  dimensions: 2560\n  timeout: 3s\n  queue_size: 7\n  batch_size: 5\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
 
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -43,10 +46,50 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 	if time.Duration(cfg.HostDelay) != 25*time.Millisecond {
 		t.Fatalf("unexpected host delay %v", time.Duration(cfg.HostDelay))
 	}
+	if cfg.Embeddings.BaseURL != "http://localhost:11434" {
+		t.Fatalf("unexpected embedding base url %q", cfg.Embeddings.BaseURL)
+	}
+	if cfg.Embeddings.Model != "qwen3-embedding" {
+		t.Fatalf("unexpected embedding model %q", cfg.Embeddings.Model)
+	}
+	if cfg.Embeddings.Dimensions != 2560 {
+		t.Fatalf("unexpected embedding dimensions %d", cfg.Embeddings.Dimensions)
+	}
+	if time.Duration(cfg.Embeddings.Timeout) != 3*time.Second {
+		t.Fatalf("unexpected embedding timeout %v", time.Duration(cfg.Embeddings.Timeout))
+	}
+	if cfg.Embeddings.QueueSize != 7 {
+		t.Fatalf("unexpected embedding queue size %d", cfg.Embeddings.QueueSize)
+	}
+	if cfg.Embeddings.BatchSize != 5 {
+		t.Fatalf("unexpected embedding batch size %d", cfg.Embeddings.BatchSize)
+	}
 
 	wantWebsites := []string{"https://example.com", "https://sub.example.org/start"}
 	if !slices.Equal(cfg.Websites, wantWebsites) {
 		t.Fatalf("unexpected websites %v", cfg.Websites)
+	}
+}
+
+func TestNormalizeConfigDefaultsEmbeddingWorkerSettings(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := normalizeConfig(Config{
+		CacheDir: t.TempDir(),
+		Websites: []string{"https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("normalizeConfig returned error: %v", err)
+	}
+
+	if cfg.Embeddings.QueueSize != 32 {
+		t.Fatalf("expected default queue size 32, got %d", cfg.Embeddings.QueueSize)
+	}
+	if cfg.Embeddings.Dimensions != 2560 {
+		t.Fatalf("expected default embedding dimensions 2560, got %d", cfg.Embeddings.Dimensions)
+	}
+	if cfg.Embeddings.BatchSize != 8 {
+		t.Fatalf("expected default batch size 8, got %d", cfg.Embeddings.BatchSize)
 	}
 }
 
@@ -105,7 +148,7 @@ func TestFetchAllStartsAllConfiguredTargets(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{firstServer.URL, secondServer.URL},
-	})
+	}, WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -156,7 +199,7 @@ func TestFetchAllStartsDifferentSeedHostsConcurrently(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{firstServer.URL, secondURL.String()},
-	}, WithHostDelay(delay))
+	}, WithHostDelay(delay), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -210,7 +253,7 @@ func TestFetchWaitsBetweenRequestsToSameHost(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	}, WithHostDelay(delay))
+	}, WithHostDelay(delay), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -275,7 +318,7 @@ func TestFetchRespectsHostDelayWhileFollowingManyDiscoveredLinks(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{startURL},
-	}, WithHostDelay(delay))
+	}, WithHostDelay(delay), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -319,7 +362,7 @@ func TestFetchUsesFirefoxUserAgent(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	})
+	}, WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -353,7 +396,7 @@ func TestFetchAllContinuesStartingSeedsAfterFirstSeedFails(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{badURL, secondServer.URL},
-	})
+	}, WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -387,7 +430,7 @@ func TestFetchUsesCollyCacheDir(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	}, WithNow(func() time.Time { return scrapeTime }))
+	}, WithNow(func() time.Time { return scrapeTime }), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -416,7 +459,7 @@ func TestFetchUsesCollyCacheDir(t *testing.T) {
 	s, err = New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	}, WithNow(func() time.Time { return scrapeTime }))
+	}, WithNow(func() time.Time { return scrapeTime }), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -463,7 +506,7 @@ func TestFetchDoesNotSaveSameURLAndHashAgainWithDifferentTimestamp(t *testing.T)
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	}, WithNow(func() time.Time { return firstTime }))
+	}, WithNow(func() time.Time { return firstTime }), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -476,7 +519,7 @@ func TestFetchDoesNotSaveSameURLAndHashAgainWithDifferentTimestamp(t *testing.T)
 	s, err = New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	}, WithNow(func() time.Time { return secondTime }))
+	}, WithNow(func() time.Time { return secondTime }), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -508,7 +551,7 @@ func TestSavePageRecordReplacesOlderSavedVersionWhenContentHashChanges(t *testin
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{"https://example.com"},
-	})
+	}, WithEmbedder(staticEmbedder{vectors: [][]float32{testVectorWithLead(0.1, 0.2, 0.3)}}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -519,16 +562,18 @@ func TestSavePageRecordReplacesOlderSavedVersionWhenContentHashChanges(t *testin
 	}
 
 	firstTime := time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC)
-	firstPage, err := s.savePageRecord(pageURL, firstTime, "<article><p>old version</p></article>", "readability")
+	firstResult, err := s.savePageRecord(pageURL, firstTime, "<article><p>old version</p></article>", "readability")
 	if err != nil {
 		t.Fatalf("first savePageRecord returned error: %v", err)
 	}
+	firstPage := firstResult.Page
 
 	secondTime := firstTime.Add(2 * time.Hour)
-	secondPage, err := s.savePageRecord(pageURL, secondTime, "<article><p>new version</p></article>", "readability")
+	secondResult, err := s.savePageRecord(pageURL, secondTime, "<article><p>new version</p></article>", "readability")
 	if err != nil {
 		t.Fatalf("second savePageRecord returned error: %v", err)
 	}
+	secondPage := secondResult.Page
 
 	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
 	if err != nil {
@@ -552,6 +597,473 @@ func TestSavePageRecordReplacesOlderSavedVersionWhenContentHashChanges(t *testin
 	if !dbPages[0].ScrapedAt.Equal(secondTime) {
 		t.Fatalf("expected latest scraped time %v, got %v", secondTime, dbPages[0].ScrapedAt)
 	}
+
+	vectorRowIDs, err := loadVectorRowIDs(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load vector row ids: %v", err)
+	}
+	if len(vectorRowIDs) != 1 {
+		t.Fatalf("expected one vector row after replacement, got %d", len(vectorRowIDs))
+	}
+	if vectorRowIDs[0] != int64(secondPage.ID) {
+		t.Fatalf("expected vector row for new page id %d, got %d", secondPage.ID, vectorRowIDs[0])
+	}
+	if vectorRowIDs[0] == int64(firstPage.ID) {
+		t.Fatalf("expected old vector row for page id %d to be removed", firstPage.ID)
+	}
+}
+
+func TestSavePageRecordStoresEmbeddingVector(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+	}, WithEmbedder(staticEmbedder{vectors: [][]float32{testVectorWithLead(0.9, 0.1, 0.2)}}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pageURL, err := url.Parse("https://example.com/article")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	result, err := s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>vector body</p></article>", "readability")
+	if err != nil {
+		t.Fatalf("savePageRecord returned error: %v", err)
+	}
+	page := result.Page
+
+	vectorRowIDs, err := loadVectorRowIDs(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load vector row ids: %v", err)
+	}
+	if len(vectorRowIDs) != 1 {
+		t.Fatalf("expected one vector row, got %d", len(vectorRowIDs))
+	}
+	if vectorRowIDs[0] != int64(page.ID) {
+		t.Fatalf("expected vector row for page id %d, got %d", page.ID, vectorRowIDs[0])
+	}
+}
+
+func TestSavePageRecordFailsWhenEmbeddingFails(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+	}, WithEmbedder(staticEmbedder{err: fmt.Errorf("embed failed")}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pageURL, err := url.Parse("https://example.com/article")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	if _, err := s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>vector body</p></article>", "readability"); err == nil {
+		t.Fatal("expected embedding error")
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(dbPages) != 0 {
+		t.Fatalf("expected no saved pages after embedding failure, got %d", len(dbPages))
+	}
+}
+
+func TestSavePageRecordSerializesEmbeddingRequestsThroughWorker(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	embedder := newBlockingEmbedder()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+		Embeddings: EmbeddingConfig{
+			QueueSize: 4,
+			BatchSize: 1,
+		},
+	}, WithEmbedder(embedder))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pageURL, err := url.Parse("https://example.com/article")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	errs := make(chan error, 3)
+	for i := 0; i < 3; i++ {
+		content := fmt.Sprintf("<article><p>body-%d</p></article>", i)
+		go func(content string) {
+			_, err := s.savePageRecord(pageURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), content, "readability")
+			errs <- err
+		}(content)
+	}
+
+	for i := 0; i < 3; i++ {
+		select {
+		case <-embedder.started:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("expected embedding job %d to start", i+1)
+		}
+		if embedder.MaxConcurrent() != 1 {
+			t.Fatalf("expected max concurrent embeddings to stay at 1, got %d", embedder.MaxConcurrent())
+		}
+		embedder.release <- struct{}{}
+	}
+
+	for i := 0; i < 3; i++ {
+		select {
+		case err := <-errs:
+			if err != nil {
+				t.Fatalf("savePageRecord returned error: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("savePageRecord did not complete")
+		}
+	}
+
+	if embedder.MaxConcurrent() != 1 {
+		t.Fatalf("expected only one concurrent embedding, got %d", embedder.MaxConcurrent())
+	}
+}
+
+func TestSavePageRecordBlocksWhenEmbeddingQueueIsFull(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	embedder := newBlockingEmbedder()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+		Embeddings: EmbeddingConfig{
+			QueueSize: 1,
+			BatchSize: 1,
+		},
+	}, WithEmbedder(embedder))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	firstURL, err := url.Parse("https://example.com/first")
+	if err != nil {
+		t.Fatalf("parse first url: %v", err)
+	}
+	secondURL, err := url.Parse("https://example.com/second")
+	if err != nil {
+		t.Fatalf("parse second url: %v", err)
+	}
+	thirdURL, err := url.Parse("https://example.com/third")
+	if err != nil {
+		t.Fatalf("parse third url: %v", err)
+	}
+
+	errs := make(chan error, 3)
+	go func() {
+		_, err := s.savePageRecord(firstURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>first</p></article>", "readability")
+		errs <- err
+	}()
+
+	select {
+	case <-embedder.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected first embedding to start")
+	}
+
+	go func() {
+		_, err := s.savePageRecord(secondURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>second</p></article>", "readability")
+		errs <- err
+	}()
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return len(s.saveQueue) == 1
+	}, "expected second save to fill queue buffer")
+
+	thirdReturned := make(chan struct{})
+	go func() {
+		_, err := s.savePageRecord(thirdURL, time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC), "<article><p>third</p></article>", "readability")
+		errs <- err
+		close(thirdReturned)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	if len(s.saveQueue) != 1 {
+		t.Fatalf("expected full queue to stay at size 1, got %d", len(s.saveQueue))
+	}
+	select {
+	case <-thirdReturned:
+		t.Fatal("expected third save to block while queue is full")
+	default:
+	}
+
+	embedder.release <- struct{}{}
+	select {
+	case <-embedder.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected second embedding to start after releasing first")
+	}
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return len(s.saveQueue) == 1
+	}, "expected third save to enqueue after queue space becomes available")
+
+	embedder.release <- struct{}{}
+	select {
+	case <-embedder.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected third embedding to start after releasing second")
+	}
+
+	embedder.release <- struct{}{}
+
+	for i := 0; i < 3; i++ {
+		select {
+		case err := <-errs:
+			if err != nil {
+				t.Fatalf("savePageRecord returned error: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("expected all queued saves to complete")
+		}
+	}
+}
+
+func TestRunSaveWorkerBatchesEmbeddingRequestsUpToConfiguredBatchSize(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	embedder := &recordingBatchEmbedder{}
+
+	db, err := vectorstore.Open(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("open vector store: %v", err)
+	}
+	if err := db.AutoMigrate(&SavedPage{}); err != nil {
+		t.Fatalf("migrate saved pages: %v", err)
+	}
+	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 2560); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	saveQueue := make(chan saveRequest, 3)
+	s := &Scraper{
+		db:                 db,
+		embedder:           embedder,
+		saveQueue:          saveQueue,
+		embeddingBatchSize: 2,
+	}
+
+	requests := []saveRequest{
+		newSaveRequest(t, "https://example.com/one", "<article><p>one</p></article>"),
+		newSaveRequest(t, "https://example.com/two", "<article><p>two</p></article>"),
+		newSaveRequest(t, "https://example.com/three", "<article><p>three</p></article>"),
+	}
+	for _, request := range requests {
+		saveQueue <- request
+	}
+	close(saveQueue)
+
+	done := make(chan struct{})
+	go func() {
+		s.runSaveWorker()
+		close(done)
+	}()
+
+	for _, request := range requests {
+		response := <-request.result
+		if response.err != nil {
+			t.Fatalf("runSaveWorker returned error: %v", response.err)
+		}
+		if response.result.Page.ID == 0 {
+			t.Fatal("expected saved page id to be set")
+		}
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not exit after queue close")
+	}
+
+	callSizes := embedder.CallSizes()
+	if !slices.Equal(callSizes, []int{2, 1}) {
+		t.Fatalf("expected embed batch sizes [2 1], got %v", callSizes)
+	}
+}
+
+func TestProcessSaveBatchLogsEmbeddingLifecycle(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	db, err := vectorstore.Open(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("open vector store: %v", err)
+	}
+	if err := db.AutoMigrate(&SavedPage{}); err != nil {
+		t.Fatalf("migrate saved pages: %v", err)
+	}
+	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 2560); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	var logOutput bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logOutput, nil))
+
+	requests := []saveRequest{
+		newSaveRequest(t, "https://example.com/one", "<article><p>one</p></article>"),
+		newSaveRequest(t, "https://example.com/two", "<article><p>two</p></article>"),
+	}
+
+	s := &Scraper{
+		db:       db,
+		embedder: staticEmbedder{},
+		logger:   logger,
+	}
+
+	s.processSaveBatch(requests)
+
+	for _, request := range requests {
+		response := <-request.result
+		if response.err != nil {
+			t.Fatalf("processSaveBatch returned error: %v", response.err)
+		}
+	}
+
+	logs := logOutput.String()
+	if !strings.Contains(logs, `msg="embedding batch started"`) {
+		t.Fatalf("expected start log, got %q", logs)
+	}
+	if !strings.Contains(logs, `queued=2`) {
+		t.Fatalf("expected queued count in logs, got %q", logs)
+	}
+	if !strings.Contains(logs, `to_embed=2`) {
+		t.Fatalf("expected to_embed count in logs, got %q", logs)
+	}
+	if !strings.Contains(logs, `msg="embedding batch finished"`) {
+		t.Fatalf("expected finish log, got %q", logs)
+	}
+}
+
+func TestProcessSaveBatchLogsEmbeddingFailure(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	db, err := vectorstore.Open(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("open vector store: %v", err)
+	}
+	if err := db.AutoMigrate(&SavedPage{}); err != nil {
+		t.Fatalf("migrate saved pages: %v", err)
+	}
+	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 2560); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	var logOutput bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logOutput, nil))
+
+	requests := []saveRequest{
+		newSaveRequest(t, "https://example.com/one", "<article><p>one</p></article>"),
+	}
+
+	s := &Scraper{
+		db:       db,
+		embedder: staticEmbedder{err: fmt.Errorf("embed failed")},
+		logger:   logger,
+	}
+
+	s.processSaveBatch(requests)
+
+	response := <-requests[0].result
+	if response.err == nil {
+		t.Fatal("expected processSaveBatch to return an error")
+	}
+
+	logs := logOutput.String()
+	if !strings.Contains(logs, `msg="embedding batch started"`) {
+		t.Fatalf("expected start log, got %q", logs)
+	}
+	if !strings.Contains(logs, `msg="embedding batch failed"`) {
+		t.Fatalf("expected failure log, got %q", logs)
+	}
+	if !strings.Contains(logs, "embed failed") {
+		t.Fatalf("expected embed error in logs, got %q", logs)
+	}
+}
+
+func TestFetchNotifiesSessionObserverOnSavedPage(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	observer := &recordingSessionObserver{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><article><p>observer body</p></article></body></html>`))
+	}))
+	defer server.Close()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{server.URL},
+	}, WithEmbedder(staticEmbedder{vectors: [][]float32{testVectorWithLead(0.3, 0.2, 0.1)}}), WithSessionObserver(observer))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+
+	if len(observer.events) != 1 {
+		t.Fatalf("expected one observer event, got %d", len(observer.events))
+	}
+	if observer.events[0].Page.ID != pages[0].ID {
+		t.Fatalf("expected observer page id %d, got %d", pages[0].ID, observer.events[0].Page.ID)
+	}
+	if observer.events[0].Reused {
+		t.Fatal("expected first observer event to be non-reused")
+	}
+}
+
+func TestFetchAllNotifiesSessionObserverOnRequestFailure(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	observer := &recordingSessionObserver{}
+
+	badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><article><p>bad</p></article></body></html>`))
+	}))
+	badURL := badServer.URL
+	badServer.Close()
+
+	goodServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><article><p>good</p></article></body></html>`))
+	}))
+	defer goodServer.Close()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{badURL, goodServer.URL},
+	}, WithEmbedder(staticEmbedder{}), WithSessionObserver(observer))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	if _, err := s.FetchAll([]string{badURL, goodServer.URL}); err == nil {
+		t.Fatal("expected crawl error")
+	}
+
+	if len(observer.failures) == 0 {
+		t.Fatal("expected observer to record at least one failure")
+	}
 }
 
 func TestFetchFollowsURLs(t *testing.T) {
@@ -574,7 +1086,7 @@ func TestFetchFollowsURLs(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	}, WithNow(func() time.Time { return scrapeTime }))
+	}, WithNow(func() time.Time { return scrapeTime }), WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -619,6 +1131,7 @@ func TestFetchLogsActionsWithoutHTMLContent(t *testing.T) {
 			Websites: []string{server.URL},
 		},
 		WithLogger(logger),
+		WithEmbedder(staticEmbedder{}),
 	)
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
@@ -656,6 +1169,7 @@ func TestFetchSavesCleanPageUsingEscapedURLAndTimestamp(t *testing.T) {
 			Websites: []string{server.URL},
 		},
 		WithNow(func() time.Time { return scrapeTime }),
+		WithEmbedder(staticEmbedder{}),
 	)
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
@@ -708,7 +1222,7 @@ func TestFetchFallsBackWhenReadabilityParserHitsOpenStackLimit(t *testing.T) {
 	s, err := New(Config{
 		CacheDir: cacheDir,
 		Websites: []string{server.URL},
-	})
+	}, WithEmbedder(staticEmbedder{}))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -745,6 +1259,31 @@ func loadPagesFromDB(path string) ([]SavedPage, error) {
 	return pages, nil
 }
 
+func loadVectorRowIDs(path string) ([]int64, error) {
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`select rowid from page_embeddings order by rowid asc`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	return ids, rows.Err()
+}
+
 func deeplyNestedHTML(depth int) string {
 	var builder strings.Builder
 	builder.WriteString("<html><body>")
@@ -776,4 +1315,147 @@ func randomNextPaths(path string, total int) []string {
 	extraOffset := int(hasher.Sum32()%uint32(total-index-2)) + 2
 	links = append(links, fmt.Sprintf("/page-%d", index+extraOffset))
 	return links
+}
+
+type staticEmbedder struct {
+	vectors [][]float32
+	err     error
+}
+
+type recordingBatchEmbedder struct {
+	mu    sync.Mutex
+	calls [][]string
+}
+
+type blockingEmbedder struct {
+	started       chan string
+	release       chan struct{}
+	mu            sync.Mutex
+	active        int
+	maxConcurrent int
+}
+
+type recordingSessionObserver struct {
+	events   []SessionPageEvent
+	failures []SessionFailureEvent
+}
+
+func (r *recordingSessionObserver) OnPageSaved(event SessionPageEvent) {
+	r.events = append(r.events, event)
+}
+
+func (r *recordingSessionObserver) OnRequestFailed(event SessionFailureEvent) {
+	r.failures = append(r.failures, event)
+}
+
+func (s staticEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	vectors := s.vectors
+	if len(vectors) == 0 {
+		vectors = [][]float32{testVectorWithLead(0.1, 0.2, 0.3)}
+	}
+
+	result := make([][]float32, 0, len(inputs))
+	for i := range inputs {
+		result = append(result, append([]float32(nil), vectors[i%len(vectors)]...))
+	}
+	return result, nil
+}
+
+func (r *recordingBatchEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
+	r.mu.Lock()
+	r.calls = append(r.calls, append([]string(nil), inputs...))
+	r.mu.Unlock()
+
+	result := make([][]float32, 0, len(inputs))
+	for i := range inputs {
+		result = append(result, testVectorWithLead(float32(i+1), 0.2, 0.3))
+	}
+	return result, nil
+}
+
+func (r *recordingBatchEmbedder) CallSizes() []int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	sizes := make([]int, 0, len(r.calls))
+	for _, call := range r.calls {
+		sizes = append(sizes, len(call))
+	}
+	return sizes
+}
+
+func newBlockingEmbedder() *blockingEmbedder {
+	return &blockingEmbedder{
+		started: make(chan string, 16),
+		release: make(chan struct{}, 16),
+	}
+}
+
+func (b *blockingEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
+	b.mu.Lock()
+	b.active++
+	if b.active > b.maxConcurrent {
+		b.maxConcurrent = b.active
+	}
+	b.mu.Unlock()
+
+	if len(inputs) > 0 {
+		b.started <- inputs[0]
+	} else {
+		b.started <- ""
+	}
+	<-b.release
+
+	b.mu.Lock()
+	b.active--
+	b.mu.Unlock()
+
+	return [][]float32{testVectorWithLead(0.4, 0.5, 0.6)}, nil
+}
+
+func (b *blockingEmbedder) MaxConcurrent() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.maxConcurrent
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, check func() bool, message string) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if check() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatal(message)
+}
+
+func newSaveRequest(t *testing.T, rawURL string, content string) saveRequest {
+	t.Helper()
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse url %q: %v", rawURL, err)
+	}
+
+	return saveRequest{
+		parsedURL:  parsedURL,
+		scrapeTime: time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC),
+		content:    content,
+		parseMode:  "readability",
+		result:     make(chan saveResponse, 1),
+	}
+}
+
+func testVectorWithLead(values ...float32) []float32 {
+	vector := make([]float32, 2560)
+	copy(vector, values)
+	return vector
 }

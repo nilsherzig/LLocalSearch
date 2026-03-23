@@ -50,7 +50,10 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 	logger.Info("loaded config", "targets", len(cfg.Websites), "cache_dir", cfg.CacheDir)
 
-	s, err := scraper.New(cfg, scraper.WithLogger(logger))
+	statusReporter := newSessionStatusReporter(stderr)
+	defer statusReporter.Finish()
+
+	s, err := scraper.New(cfg, scraper.WithLogger(logger), scraper.WithSessionObserver(statusReporter))
 	if err != nil {
 		return fmt.Errorf("create scraper: %w", err)
 	}

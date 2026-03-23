@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.1
+	github.com/asg017/sqlite-vec-go-bindings v0.1.6
 	github.com/gocolly/colly/v2 v2.3.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.6.0
@@ -17,6 +18,7 @@ require (
 	github.com/antchfx/xmlquery v1.5.0 // indirect
 	github.com/antchfx/xpath v1.3.5 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
+	github.com/asg017/sqlite-vec-go-bindings v0.1.6 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
 	github.com/gobwas/glob v0.2.3 // indirect

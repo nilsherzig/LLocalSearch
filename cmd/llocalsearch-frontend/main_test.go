@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,8 +13,14 @@ import (
 
 func TestRunStartsFrontendServer(t *testing.T) {
 	tempDir := t.TempDir()
+
+	embedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"embeddings":[[` + strings.Repeat("0,", 4095) + `1]]}`))
+	}))
+	defer embedServer.Close()
+
 	configPath := filepath.Join(tempDir, "config.yaml")
-	configData := []byte("cache_dir: " + filepath.Join(tempDir, "cache") + "\nwebsites:\n  - https://example.com\n")
+	configData := []byte("cache_dir: " + filepath.Join(tempDir, "cache") + "\nembeddings:\n  base_url: " + embedServer.URL + "\n  model: qwen3-embedding\n  dimensions: 4096\nwebsites:\n  - https://example.com\n")
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -33,6 +40,12 @@ func TestRunStartsFrontendServer(t *testing.T) {
 		gotAddr = addr
 		if handler == nil {
 			t.Fatal("expected non-nil handler")
+		}
+		req := httptest.NewRequest(http.MethodGet, "/search?q=test", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected search handler to work, got status %d and body %q", rec.Code, rec.Body.String())
 		}
 		return nil
 	})

@@ -56,6 +56,7 @@ func run(args []string, stderr io.Writer, listen func(string, http.Handler) erro
 	server, err := frontend.NewServer(frontend.Config{
 		DBPath:         filepath.Join(cfg.CacheDir, "pages.db"),
 		TemplatesDir:   *templatesDir,
+		Embeddings:     cfg.Embeddings,
 		WhitelistPages: cfg.Websites,
 		Logger:         logger,
 	})

@@ -2,10 +2,11 @@ package scraper
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"html"
+	stdhtml "html"
 	"io"
 	"log/slog"
 	"net"
@@ -20,16 +21,44 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/gocolly/colly/v2"
+	"github.com/nilsherzig/llocalsearch/embedding"
+	"github.com/nilsherzig/llocalsearch/vectorstore"
+	htmlnode "golang.org/x/net/html"
 	"gopkg.in/yaml.v3"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type Config struct {
-	CacheDir  string   `yaml:"cache_dir"`
-	HostDelay Duration `yaml:"host_delay"`
-	Websites  []string `yaml:"websites"`
+	CacheDir   string          `yaml:"cache_dir"`
+	HostDelay  Duration        `yaml:"host_delay"`
+	Embeddings EmbeddingConfig `yaml:"embeddings"`
+	Websites   []string        `yaml:"websites"`
+}
+
+type EmbeddingConfig struct {
+	BaseURL    string   `yaml:"base_url"`
+	Model      string   `yaml:"model"`
+	Dimensions int      `yaml:"dimensions"`
+	Timeout    Duration `yaml:"timeout"`
+	QueueSize  int      `yaml:"queue_size"`
+	BatchSize  int      `yaml:"batch_size"`
+}
+
+type SessionPageEvent struct {
+	Page              SavedPage
+	EmbeddingDuration time.Duration
+	Reused            bool
+}
+
+type SessionFailureEvent struct {
+	URL      string
+	FailedAt time.Time
+	Err      error
+}
+
+type SessionObserver interface {
+	OnPageSaved(SessionPageEvent)
+	OnRequestFailed(SessionFailureEvent)
 }
 
 type Duration time.Duration
@@ -57,7 +86,11 @@ type Scraper struct {
 	now       func() time.Time
 	hostDelay time.Duration
 	db        *gorm.DB
-	saveMu    sync.Mutex
+	embedder  embedding.Client
+	observer  SessionObserver
+	saveQueue chan saveRequest
+
+	embeddingBatchSize int
 }
 
 type SavedPage struct {
@@ -116,6 +149,41 @@ func WithHostDelay(delay time.Duration) Option {
 	}
 }
 
+func WithEmbedder(embedder embedding.Client) Option {
+	return func(s *Scraper) {
+		if embedder != nil {
+			s.embedder = embedder
+		}
+	}
+}
+
+func WithSessionObserver(observer SessionObserver) Option {
+	return func(s *Scraper) {
+		if observer != nil {
+			s.observer = observer
+		}
+	}
+}
+
+type saveResult struct {
+	Page              SavedPage
+	EmbeddingDuration time.Duration
+	Reused            bool
+}
+
+type saveRequest struct {
+	parsedURL  *url.URL
+	scrapeTime time.Time
+	content    string
+	parseMode  string
+	result     chan saveResponse
+}
+
+type saveResponse struct {
+	result saveResult
+	err    error
+}
+
 func New(cfg Config, opts ...Option) (*Scraper, error) {
 	normalized, err := normalizeConfig(cfg)
 	if err != nil {
@@ -149,11 +217,29 @@ func New(cfg Config, opts ...Option) (*Scraper, error) {
 		opt(s)
 	}
 
-	db, err := openDatabase(s.dbPath)
+	if s.embedder == nil && normalized.Embeddings.BaseURL != "" && normalized.Embeddings.Model != "" {
+		s.embedder = embedding.NewClient(embedding.Config{
+			BaseURL:    normalized.Embeddings.BaseURL,
+			Model:      normalized.Embeddings.Model,
+			Dimensions: normalized.Embeddings.Dimensions,
+			Timeout:    time.Duration(normalized.Embeddings.Timeout),
+		}, nil)
+	}
+
+	db, err := vectorstore.Open(s.dbPath)
 	if err != nil {
 		return nil, err
 	}
+	if err := db.AutoMigrate(&SavedPage{}); err != nil {
+		return nil, fmt.Errorf("migrate sqlite database: %w", err)
+	}
+	if err := vectorstore.EnsureSchema(db, normalized.Embeddings.Model, normalized.Embeddings.Dimensions); err != nil {
+		return nil, err
+	}
 	s.db = db
+	s.saveQueue = make(chan saveRequest, normalized.Embeddings.QueueSize)
+	s.embeddingBatchSize = normalized.Embeddings.BatchSize
+	go s.runSaveWorker()
 
 	return s, nil
 }
@@ -201,8 +287,7 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 
 	collector.OnResponse(func(r *colly.Response) {
 		s.logger.Info("received response", "url", r.Request.URL.String(), "status", r.StatusCode, "bytes", len(r.Body))
-
-		savedPage, err := s.saveReadablePage(r.Request.URL.String(), r.Body, scrapeTime)
+		saveResult, err := s.saveReadablePage(r.Request.URL.String(), r.Body, scrapeTime)
 		if err != nil {
 			s.logger.Error("could not save page", "url", r.Request.URL.String(), "err", err)
 			mu.Lock()
@@ -212,15 +297,22 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 		}
 
 		mu.Lock()
-		if _, exists := savedByURL[savedPage.URL]; exists {
+		if _, exists := savedByURL[saveResult.Page.URL]; exists {
 			mu.Unlock()
 			return
 		}
 
-		savedByURL[savedPage.URL] = savedPage
-		savedPages = append(savedPages, savedPage)
+		savedByURL[saveResult.Page.URL] = saveResult.Page
+		savedPages = append(savedPages, saveResult.Page)
 		mu.Unlock()
-		s.logger.Info("saved page", "url", savedPage.URL, "page_key", savedPage.PageKey, "id", savedPage.ID)
+		s.logger.Info("saved page", "url", saveResult.Page.URL, "page_key", saveResult.Page.PageKey, "id", saveResult.Page.ID)
+		if s.observer != nil {
+			s.observer.OnPageSaved(SessionPageEvent{
+				Page:              saveResult.Page,
+				EmbeddingDuration: saveResult.EmbeddingDuration,
+				Reused:            saveResult.Reused,
+			})
+		}
 	})
 
 	collector.OnError(func(r *colly.Response, err error) {
@@ -236,6 +328,13 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 			return
 		}
 		s.logger.Error("request failed", "url", url, "err", err)
+		if s.observer != nil {
+			s.observer.OnRequestFailed(SessionFailureEvent{
+				URL:      url,
+				FailedAt: time.Now(),
+				Err:      err,
+			})
+		}
 		mu.Lock()
 		crawlErrs = append(crawlErrs, err)
 		mu.Unlock()
@@ -262,6 +361,13 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 	for _, rawURL := range rawURLs {
 		s.logger.Info("starting crawl", "url", rawURL)
 		if err := collector.Visit(rawURL); err != nil {
+			if s.observer != nil {
+				s.observer.OnRequestFailed(SessionFailureEvent{
+					URL:      rawURL,
+					FailedAt: time.Now(),
+					Err:      err,
+				})
+			}
 			mu.Lock()
 			crawlErrs = append(crawlErrs, fmt.Errorf("visit url %s: %w", rawURL, err))
 			mu.Unlock()
@@ -296,13 +402,26 @@ func normalizeConfig(cfg Config) (Config, error) {
 	}
 
 	normalized := Config{
-		CacheDir:  cfg.CacheDir,
-		HostDelay: cfg.HostDelay,
-		Websites:  make([]string, 0, len(cfg.Websites)),
+		CacheDir:   cfg.CacheDir,
+		HostDelay:  cfg.HostDelay,
+		Embeddings: cfg.Embeddings,
+		Websites:   make([]string, 0, len(cfg.Websites)),
 	}
 
 	if normalized.CacheDir == "" {
 		normalized.CacheDir = ".cache/colly"
+	}
+	if normalized.Embeddings.Dimensions <= 0 {
+		normalized.Embeddings.Dimensions = 2560
+	}
+	if normalized.Embeddings.Timeout <= 0 {
+		normalized.Embeddings.Timeout = Duration(30 * time.Second)
+	}
+	if normalized.Embeddings.QueueSize <= 0 {
+		normalized.Embeddings.QueueSize = 32
+	}
+	if normalized.Embeddings.BatchSize <= 0 {
+		normalized.Embeddings.BatchSize = 8
 	}
 
 	for _, website := range cfg.Websites {
@@ -369,10 +488,10 @@ func mustHostname(rawURL string) string {
 	return parsed.Hostname()
 }
 
-func (s *Scraper) saveReadablePage(pageURL string, body []byte, scrapeTime time.Time) (SavedPage, error) {
+func (s *Scraper) saveReadablePage(pageURL string, body []byte, scrapeTime time.Time) (saveResult, error) {
 	parsedURL, err := url.ParseRequestURI(pageURL)
 	if err != nil {
-		return SavedPage{}, fmt.Errorf("parse page url: %w", err)
+		return saveResult{}, fmt.Errorf("parse page url: %w", err)
 	}
 
 	parser := readability.NewParser()
@@ -385,24 +504,205 @@ func (s *Scraper) saveReadablePage(pageURL string, body []byte, scrapeTime time.
 			s.logger.Warn("readability parser hit html stack limit, using raw fallback", "url", pageURL)
 			return s.savePageRecord(parsedURL, scrapeTime, safeRawHTMLFallback(body), "raw_fallback")
 		}
-		return SavedPage{}, fmt.Errorf("parse readability content: %w", err)
+		return saveResult{}, fmt.Errorf("parse readability content: %w", err)
 	}
 
 	var content bytes.Buffer
 	if err := article.RenderHTML(&content); err != nil {
-		return SavedPage{}, fmt.Errorf("render cleaned html: %w", err)
+		return saveResult{}, fmt.Errorf("render cleaned html: %w", err)
 	}
 
 	return s.savePageRecord(parsedURL, scrapeTime, content.String(), parseMode)
 }
 
-func (s *Scraper) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) (SavedPage, error) {
-	s.saveMu.Lock()
-	defer s.saveMu.Unlock()
+func (s *Scraper) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) (saveResult, error) {
+	responseCh := make(chan saveResponse, 1)
+	s.saveQueue <- saveRequest{
+		parsedURL:  cloneURL(parsedURL),
+		scrapeTime: scrapeTime,
+		content:    content,
+		parseMode:  parseMode,
+		result:     responseCh,
+	}
+	response := <-responseCh
+	return response.result, response.err
+}
 
+func (s *Scraper) runSaveWorker() {
+	for request := range s.saveQueue {
+		s.processSaveBatch(s.collectSaveBatch(request))
+	}
+}
+
+func (s *Scraper) collectSaveBatch(first saveRequest) []saveRequest {
+	batchSize := s.embeddingBatchSize
+	if batchSize <= 0 {
+		batchSize = 1
+	}
+
+	batch := []saveRequest{first}
+	for len(batch) < batchSize {
+		select {
+		case request, ok := <-s.saveQueue:
+			if !ok {
+				return batch
+			}
+			batch = append(batch, request)
+		default:
+			return batch
+		}
+	}
+
+	return batch
+}
+
+type preparedSave struct {
+	request saveRequest
+	page    SavedPage
+	text    string
+}
+
+func (s *Scraper) processSaveBatch(batch []saveRequest) {
+	if len(batch) == 0 {
+		return
+	}
+
+	prepared := make([]preparedSave, 0, len(batch))
+	inputs := make([]string, 0, len(batch))
+	for _, request := range batch {
+		pending, existingResult, err := s.prepareSaveRequest(request)
+		if err != nil {
+			request.result <- saveResponse{err: err}
+			continue
+		}
+		if existingResult != nil {
+			request.result <- saveResponse{result: *existingResult}
+			continue
+		}
+
+		prepared = append(prepared, pending)
+		inputs = append(inputs, pending.text)
+	}
+
+	if len(prepared) == 0 {
+		if len(batch) > 0 && len(batch) != len(prepared) {
+			s.logInfo("embedding batch skipped", "queued", len(batch), "reused", len(batch)-len(prepared))
+		}
+		return
+	}
+
+	s.logInfo("embedding batch started", "queued", len(batch), "to_embed", len(prepared), "reused", len(batch)-len(prepared))
+
+	if s.embedder == nil {
+		err := fmt.Errorf("embedder not configured")
+		s.logError("embedding batch failed", "queued", len(batch), "to_embed", len(prepared), "err", err)
+		for _, pending := range prepared {
+			pending.request.result <- saveResponse{err: err}
+		}
+		return
+	}
+
+	embeddingStart := time.Now()
+	vectors, err := s.embedder.Embed(context.Background(), inputs)
+	if err != nil {
+		wrapped := fmt.Errorf("embed page content: %w", err)
+		s.logError("embedding batch failed", "queued", len(batch), "to_embed", len(prepared), "err", wrapped)
+		for _, pending := range prepared {
+			pending.request.result <- saveResponse{err: wrapped}
+		}
+		return
+	}
+	embeddingDuration := time.Since(embeddingStart)
+	if len(vectors) != len(prepared) {
+		err := fmt.Errorf("embed page content returned %d vectors", len(vectors))
+		s.logError("embedding batch failed", "queued", len(batch), "to_embed", len(prepared), "err", err)
+		for _, pending := range prepared {
+			pending.request.result <- saveResponse{err: err}
+		}
+		return
+	}
+	s.logInfo("embedding batch finished", "queued", len(batch), "to_embed", len(prepared), "duration", embeddingDuration)
+
+	for i, pending := range prepared {
+		result, err := s.persistPreparedPage(pending.page, vectors[i], embeddingDuration)
+		pending.request.result <- saveResponse{result: result, err: err}
+	}
+}
+
+func (s *Scraper) logInfo(msg string, args ...any) {
+	if s.logger == nil {
+		return
+	}
+	s.logger.Info(msg, args...)
+}
+
+func (s *Scraper) logError(msg string, args ...any) {
+	if s.logger == nil {
+		return
+	}
+	s.logger.Error(msg, args...)
+}
+
+func (s *Scraper) prepareSaveRequest(request saveRequest) (preparedSave, *saveResult, error) {
+	page := buildSavedPage(request.parsedURL, request.scrapeTime, request.content, request.parseMode)
+
+	if existing, ok, err := s.findSavedPage(page.URL, page.ContentHash); err != nil {
+		return preparedSave{}, nil, err
+	} else if ok {
+		result := saveResult{Page: existing, Reused: true}
+		return preparedSave{}, &result, nil
+	}
+
+	return preparedSave{
+		request: request,
+		page:    page,
+		text:    extractPlainText(request.content),
+	}, nil, nil
+}
+
+func (s *Scraper) persistPreparedPage(page SavedPage, vector []float32, embeddingDuration time.Duration) (saveResult, error) {
+	var saved SavedPage
+	if len(vector) == 0 {
+		return saveResult{}, fmt.Errorf("embed page content returned empty vector")
+	}
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		var stalePages []SavedPage
+		if err := tx.Where("url = ?", page.URL).Find(&stalePages).Error; err != nil {
+			return fmt.Errorf("load stale page versions: %w", err)
+		}
+
+		staleIDs := make([]uint, 0, len(stalePages))
+		for _, stalePage := range stalePages {
+			staleIDs = append(staleIDs, stalePage.ID)
+		}
+		if err := vectorstore.DeleteEmbeddings(tx, staleIDs); err != nil {
+			return err
+		}
+		if err := tx.Where("url = ?", page.URL).Delete(&SavedPage{}).Error; err != nil {
+			return fmt.Errorf("delete old page versions: %w", err)
+		}
+
+		pageToSave := page
+		if err := tx.Create(&pageToSave).Error; err != nil {
+			return fmt.Errorf("insert page: %w", err)
+		}
+		if err := vectorstore.UpsertEmbedding(tx, pageToSave.ID, vector); err != nil {
+			return err
+		}
+		saved = pageToSave
+		return nil
+	}); err != nil {
+		return saveResult{}, err
+	}
+
+	return saveResult{Page: saved, EmbeddingDuration: embeddingDuration}, nil
+}
+
+func buildSavedPage(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) SavedPage {
 	contentHash := hashContent(content)
 
-	page := SavedPage{
+	return SavedPage{
 		URL:         parsedURL.String(),
 		Host:        parsedURL.Host,
 		Path:        normalizedPagePath(parsedURL),
@@ -412,41 +712,24 @@ func (s *Scraper) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, conte
 		Content:     content,
 		ScrapedAt:   scrapeTime,
 	}
+}
 
-	var saved SavedPage
-	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		result := tx.Where("url = ? AND content_hash = ?", page.URL, page.ContentHash).Limit(1).Find(&saved)
-		if result.Error != nil {
-			return fmt.Errorf("load existing page: %w", result.Error)
-		}
-		if result.RowsAffected > 0 {
-			return nil
-		}
-
-		if err := tx.Where("url = ?", page.URL).Delete(&SavedPage{}).Error; err != nil {
-			return fmt.Errorf("delete old page versions: %w", err)
-		}
-
-		if err := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "url"}, {Name: "content_hash"}},
-			DoNothing: true,
-		}).Create(&page).Error; err != nil {
-			return fmt.Errorf("insert page: %w", err)
-		}
-		if page.ID != 0 {
-			saved = page
-			return nil
-		}
-
-		if err := tx.Where("url = ? AND content_hash = ?", page.URL, page.ContentHash).First(&saved).Error; err != nil {
-			return fmt.Errorf("load inserted page: %w", err)
-		}
+func cloneURL(source *url.URL) *url.URL {
+	if source == nil {
 		return nil
-	}); err != nil {
-		return SavedPage{}, err
 	}
 
-	return saved, nil
+	cloned := *source
+	return &cloned
+}
+
+func (s *Scraper) findSavedPage(pageURL string, contentHash string) (SavedPage, bool, error) {
+	var existing SavedPage
+	result := s.db.Where("url = ? AND content_hash = ?", pageURL, contentHash).Limit(1).Find(&existing)
+	if result.Error != nil {
+		return SavedPage{}, false, fmt.Errorf("load existing page: %w", result.Error)
+	}
+	return existing, result.RowsAffected > 0, nil
 }
 
 func isHTMLStackLimitError(err error) bool {
@@ -458,7 +741,31 @@ func isAlreadyVisitedError(err error) bool {
 }
 
 func safeRawHTMLFallback(body []byte) string {
-	return "<pre>" + html.EscapeString(string(body)) + "</pre>"
+	return "<pre>" + stdhtml.EscapeString(string(body)) + "</pre>"
+}
+
+func extractPlainText(content string) string {
+	tokenizer := htmlnode.NewTokenizer(strings.NewReader(content))
+	var builder strings.Builder
+	for {
+		switch tokenizer.Next() {
+		case htmlnode.ErrorToken:
+			text := strings.TrimSpace(strings.Join(strings.Fields(builder.String()), " "))
+			if text == "" {
+				return content
+			}
+			return text
+		case htmlnode.TextToken:
+			token := strings.TrimSpace(string(tokenizer.Text()))
+			if token == "" {
+				continue
+			}
+			if builder.Len() > 0 {
+				builder.WriteByte(' ')
+			}
+			builder.WriteString(token)
+		}
+	}
 }
 
 func hashContent(content string) string {
@@ -479,21 +786,4 @@ func normalizedPagePath(pageURL *url.URL) string {
 		return path + "/"
 	}
 	return path
-}
-
-func openDatabase(path string) (*gorm.DB, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("create database dir: %w", err)
-	}
-
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite database: %w", err)
-	}
-
-	if err := db.AutoMigrate(&SavedPage{}); err != nil {
-		return nil, fmt.Errorf("migrate sqlite database: %w", err)
-	}
-
-	return db, nil
 }

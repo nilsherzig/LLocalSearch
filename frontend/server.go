@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"io"
@@ -14,21 +15,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nilsherzig/llocalsearch/embedding"
 	"github.com/nilsherzig/llocalsearch/scraper"
+	"github.com/nilsherzig/llocalsearch/vectorstore"
 	"golang.org/x/net/html"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 type Config struct {
 	DBPath         string
 	TemplatesDir   string
+	Embeddings     scraper.EmbeddingConfig
+	Embedder       embedding.Client
 	WhitelistPages []string
 	Logger         *slog.Logger
 }
 
 type Server struct {
 	db             *gorm.DB
+	embedder       embedding.Client
 	logger         *slog.Logger
 	templates      *template.Template
 	mux            *http.ServeMux
@@ -84,12 +89,15 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
-	db, err := gorm.Open(sqlite.Open(cfg.DBPath), &gorm.Config{})
+	db, err := vectorstore.Open(cfg.DBPath)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite database: %w", err)
+		return nil, err
 	}
 	if err := db.AutoMigrate(&scraper.SavedPage{}); err != nil {
 		return nil, fmt.Errorf("migrate sqlite database: %w", err)
+	}
+	if err := vectorstore.EnsureSchema(db, cfg.Embeddings.Model, cfg.Embeddings.Dimensions); err != nil {
+		return nil, err
 	}
 
 	templates, err := template.ParseFiles(
@@ -102,8 +110,19 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 
+	embedder := cfg.Embedder
+	if embedder == nil && cfg.Embeddings.BaseURL != "" && cfg.Embeddings.Model != "" {
+		embedder = embedding.NewClient(embedding.Config{
+			BaseURL:    cfg.Embeddings.BaseURL,
+			Model:      cfg.Embeddings.Model,
+			Dimensions: cfg.Embeddings.Dimensions,
+			Timeout:    time.Duration(cfg.Embeddings.Timeout),
+		}, nil)
+	}
+
 	server := &Server{
 		db:             db,
+		embedder:       embedder,
 		logger:         logger,
 		templates:      templates,
 		mux:            http.NewServeMux(),
@@ -309,134 +328,55 @@ func (s *Server) searchPages(query string) ([]searchResult, error) {
 	if query == "" {
 		return nil, nil
 	}
+	if s.embedder == nil {
+		return nil, fmt.Errorf("embedder not configured")
+	}
+
+	vectors, err := s.embedder.Embed(context.Background(), []string{query})
+	if err != nil {
+		return nil, fmt.Errorf("embed query: %w", err)
+	}
+	if len(vectors) != 1 {
+		return nil, fmt.Errorf("embed query returned %d vectors", len(vectors))
+	}
+
+	matches, err := vectorstore.Search(s.db, vectors[0], 20)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+
+	ids := make([]uint, 0, len(matches))
+	for _, match := range matches {
+		ids = append(ids, match.RowID)
+	}
 
 	var pages []scraper.SavedPage
-	if err := s.db.Order("scraped_at desc").Find(&pages).Error; err != nil {
+	if err := s.db.Where("id IN ?", ids).Find(&pages).Error; err != nil {
 		return nil, err
 	}
 
-	type scoredResult struct {
-		searchResult
-		score int
+	pagesByID := make(map[uint]scraper.SavedPage, len(pages))
+	for _, page := range pages {
+		pagesByID[page.ID] = page
 	}
 
-	scored := make([]scoredResult, 0, len(pages))
-	for _, page := range pages {
-		plainContent := extractPlainText(page.Content)
-		score := scorePageSearch(query, page, plainContent)
-		if score <= 0 {
+	results := make([]searchResult, 0, len(matches))
+	for _, match := range matches {
+		page, ok := pagesByID[match.RowID]
+		if !ok {
 			continue
 		}
-
-		scored = append(scored, scoredResult{
-			searchResult: searchResult{
-				Page:    page,
-				Excerpt: buildExcerpt(plainContent, query),
-			},
-			score: score,
+		plainContent := extractPlainText(page.Content)
+		results = append(results, searchResult{
+			Page:    page,
+			Excerpt: buildExcerpt(plainContent, query),
 		})
 	}
 
-	slices.SortFunc(scored, func(a, b scoredResult) int {
-		if a.score != b.score {
-			return b.score - a.score
-		}
-		if !a.Page.ScrapedAt.Equal(b.Page.ScrapedAt) {
-			if a.Page.ScrapedAt.After(b.Page.ScrapedAt) {
-				return -1
-			}
-			return 1
-		}
-		return strings.Compare(a.Page.URL, b.Page.URL)
-	})
-
-	if len(scored) > 25 {
-		scored = scored[:25]
-	}
-
-	results := make([]searchResult, 0, len(scored))
-	for _, item := range scored {
-		results = append(results, item.searchResult)
-	}
-
 	return results, nil
-}
-
-func scorePageSearch(query string, page scraper.SavedPage, plainContent string) int {
-	queryTerms := tokenizeSearchText(query)
-	if len(queryTerms) == 0 {
-		return 0
-	}
-
-	fieldWeights := []struct {
-		text   string
-		weight int
-	}{
-		{text: page.URL, weight: 7},
-		{text: page.Host, weight: 6},
-		{text: page.Path, weight: 5},
-		{text: plainContent, weight: 3},
-	}
-
-	total := 0
-	for _, term := range queryTerms {
-		termBest := 0
-		for _, field := range fieldWeights {
-			score := scoreField(term, field.text) * field.weight
-			if score > termBest {
-				termBest = score
-			}
-		}
-		if termBest == 0 {
-			return 0
-		}
-		total += termBest
-	}
-
-	return total
-}
-
-func scoreField(query string, text string) int {
-	normalizedText := normalizeSearchText(text)
-	if normalizedText == "" {
-		return 0
-	}
-	if idx := strings.Index(normalizedText, query); idx >= 0 {
-		return 1000 - min(idx, 300)
-	}
-
-	best := 0
-	for _, token := range strings.Fields(normalizedText) {
-		if token == query {
-			return 950
-		}
-		if strings.HasPrefix(token, query) {
-			best = max(best, 900-len(token)+len(query))
-		}
-		if score := fuzzyTokenScore(query, token); score > best {
-			best = score
-		}
-	}
-
-	return best
-}
-
-func fuzzyTokenScore(query string, token string) int {
-	if token == "" {
-		return 0
-	}
-
-	dist := levenshteinDistance(query, token)
-	maxDistance := max(1, len(query)/3)
-	if dist <= maxDistance {
-		return 760 - dist*120 - abs(len(token)-len(query))*15
-	}
-
-	if matched, gaps := subsequenceGapScore(query, token); matched {
-		return 520 - gaps*10 - abs(len(token)-len(query))*5
-	}
-
-	return 0
 }
 
 func buildExcerpt(text string, query string) string {
@@ -449,7 +389,7 @@ func buildExcerpt(text string, query string) string {
 		return normalizedText
 	}
 
-	normalizedQuery := normalizeSearchText(query)
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	if normalizedQuery != "" {
 		lowerText := strings.ToLower(normalizedText)
 		if idx := strings.Index(lowerText, normalizedQuery); idx >= 0 {
@@ -487,109 +427,4 @@ func extractPlainText(content string) string {
 			builder.WriteString(text)
 		}
 	}
-}
-
-func tokenizeSearchText(input string) []string {
-	normalized := normalizeSearchText(input)
-	if normalized == "" {
-		return nil
-	}
-	return strings.Fields(normalized)
-}
-
-func normalizeSearchText(input string) string {
-	var builder strings.Builder
-	builder.Grow(len(input))
-	lastSpace := true
-	for _, r := range strings.ToLower(input) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			builder.WriteRune(r)
-			lastSpace = false
-			continue
-		}
-		if !lastSpace {
-			builder.WriteByte(' ')
-			lastSpace = true
-		}
-	}
-
-	return strings.TrimSpace(builder.String())
-}
-
-func levenshteinDistance(a string, b string) int {
-	if a == b {
-		return 0
-	}
-	if a == "" {
-		return len(b)
-	}
-	if b == "" {
-		return len(a)
-	}
-
-	prev := make([]int, len(b)+1)
-	for j := 0; j <= len(b); j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= len(a); i++ {
-		curr := make([]int, len(b)+1)
-		curr[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 0
-			if a[i-1] != b[j-1] {
-				cost = 1
-			}
-			curr[j] = min(
-				min(curr[j-1]+1, prev[j]+1),
-				prev[j-1]+cost,
-			)
-		}
-		prev = curr
-	}
-
-	return prev[len(b)]
-}
-
-func subsequenceGapScore(query string, token string) (bool, int) {
-	if len(query) == 0 {
-		return false, 0
-	}
-
-	queryIndex := 0
-	lastMatch := -1
-	gaps := 0
-	for i := 0; i < len(token) && queryIndex < len(query); i++ {
-		if token[i] != query[queryIndex] {
-			continue
-		}
-		if lastMatch >= 0 {
-			gaps += i - lastMatch - 1
-		}
-		lastMatch = i
-		queryIndex++
-	}
-
-	return queryIndex == len(query), gaps
-}
-
-func min(a int, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func abs(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
 }

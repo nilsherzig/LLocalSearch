@@ -1,5 +1,16 @@
 cache_dir: ./.cache/colly
-host_delay: 1000ms
+# host_delay: 1000ms
+host_delay: 200ms
+embeddings:
+  base_url: http://localhost:11434
+  # model: qwen3-embedding
+  model: qwen3-embedding:4b
+  dimensions: 2560
+  # model: nomic-embed-text-v2-moe
+  # dimensions: 256
+  timeout: 30s
+  queue_size: 8
+  batch_size: 2
 websites:
   - https://go-colly.org
   - https://book.kubebuilder.io

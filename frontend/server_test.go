@@ -1,6 +1,8 @@
 package frontend
 
 import (
+	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -11,13 +13,14 @@ import (
 	"testing"
 	"time"
 
+	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/nilsherzig/llocalsearch/scraper"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
-	server := newTestServer(t)
+	server, _ := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -53,7 +56,7 @@ func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
 }
 
 func TestPagesHandlerListsScrapedPages(t *testing.T) {
-	server := newTestServer(t)
+	server, _ := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/pages", nil)
 	rec := httptest.NewRecorder()
@@ -74,7 +77,7 @@ func TestPagesHandlerListsScrapedPages(t *testing.T) {
 }
 
 func TestPageDetailHandlerShowsScrapedContent(t *testing.T) {
-	server := newTestServer(t)
+	server, _ := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/pages/1", nil)
 	rec := httptest.NewRecorder()
@@ -95,7 +98,7 @@ func TestPageDetailHandlerShowsScrapedContent(t *testing.T) {
 }
 
 func TestPageDetailHandlerReturnsNotFoundForUnknownPage(t *testing.T) {
-	server := newTestServer(t)
+	server, _ := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/pages/999", nil)
 	rec := httptest.NewRecorder()
@@ -108,9 +111,18 @@ func TestPageDetailHandlerReturnsNotFoundForUnknownPage(t *testing.T) {
 }
 
 func TestSearchHandlerFindsFuzzyMatchesAcrossDownloadedPages(t *testing.T) {
-	server := newTestServer(t)
+	server, dbPath := newTestServer(t)
+	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
+		t.Fatalf("insert first embedding: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 2, vectorWithLead(0, 1, 0)); err != nil {
+		t.Fatalf("insert second embedding: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 3, vectorWithLead(0, 0, 1)); err != nil {
+		t.Fatalf("insert third embedding: %v", err)
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/search?q=artcle", nil)
+	req := httptest.NewRequest(http.MethodGet, "/search?q=kubernetes+guide", nil)
 	rec := httptest.NewRecorder()
 
 	server.Handler().ServeHTTP(rec, req)
@@ -120,18 +132,31 @@ func TestSearchHandlerFindsFuzzyMatchesAcrossDownloadedPages(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !strings.Contains(body, `Results for "artcle"`) {
+	if !strings.Contains(body, `Results for "kubernetes guide"`) {
 		t.Fatalf("expected search heading, got %q", body)
 	}
 	if !strings.Contains(body, "https://example.com/article") {
-		t.Fatalf("expected fuzzy search to find article page, got %q", body)
+		t.Fatalf("expected vector search to find article page, got %q", body)
 	}
 	if !strings.Contains(body, "clean article body") {
 		t.Fatalf("expected search snippet to include matched content, got %q", body)
 	}
 }
 
-func newTestServer(t *testing.T) *Server {
+func TestSearchHandlerReturnsInternalServerErrorWhenEmbeddingFails(t *testing.T) {
+	server, _ := newTestServer(t, testEmbedder{err: context.DeadlineExceeded})
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=test", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+}
+
+func newTestServer(t *testing.T, overrides ...testEmbedder) (*Server, string) {
 	t.Helper()
 
 	tempDir := t.TempDir()
@@ -183,10 +208,16 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatal("resolve current file")
 	}
 
+	embedder := testEmbedder{vectors: [][]float32{vectorWithLead(1, 0, 0)}}
+	if len(overrides) > 0 {
+		embedder = overrides[0]
+	}
+
 	server, err := NewServer(Config{
 		DBPath:       dbPath,
 		TemplatesDir: filepath.Join(filepath.Dir(testFile), "templates"),
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		Embedder:     embedder,
 		WhitelistPages: []string{
 			"https://example.com",
 			"https://news.example.org/start",
@@ -196,5 +227,56 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatalf("NewServer returned error: %v", err)
 	}
 
-	return server
+	return server, dbPath
+}
+
+func insertTestEmbedding(dbPath string, pageID int64, vector []float32) error {
+	sqlite_vec.Auto()
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`create virtual table if not exists page_embeddings using vec0(embedding float[2560] distance_metric=cosine)`); err != nil {
+		return err
+	}
+	blob, err := sqlite_vec.SerializeFloat32(vector)
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or replace into page_embeddings(rowid, embedding) values (?, ?)`, pageID, blob); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type testEmbedder struct {
+	vectors [][]float32
+	err     error
+}
+
+func (t testEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
+	if t.err != nil {
+		return nil, t.err
+	}
+
+	vectors := t.vectors
+	if len(vectors) == 0 {
+		vectors = [][]float32{vectorWithLead(1, 0, 0)}
+	}
+
+	result := make([][]float32, 0, len(inputs))
+	for i := range inputs {
+		result = append(result, append([]float32(nil), vectors[i%len(vectors)]...))
+	}
+	return result, nil
+}
+
+func vectorWithLead(values ...float32) []float32 {
+	vector := make([]float32, 2560)
+	copy(vector, values)
+	return vector
 }
