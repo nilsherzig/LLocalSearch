@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -66,19 +67,27 @@ func TestRunScrapeFetchesTargetsFromConfigWithoutEmbeddings(t *testing.T) {
 func TestRunEmbedBackfillsMissingEmbeddings(t *testing.T) {
 	t.Parallel()
 
+	var gotInput []string
 	embedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode embed request: %v", err)
+		}
+		gotInput = append([]string(nil), request.Input...)
 		_, _ = w.Write([]byte(`{"embeddings":[[` + strings.Repeat("0,", 4095) + `1]]}`))
 	}))
 	defer embedServer.Close()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`<html><body><article><h1>CLI</h1><p>cli-response</p></article></body></html>`))
+		_, _ = w.Write([]byte(`<html><body><article><h1>one two</h1><p>three four</p></article></body></html>`))
 	}))
 	defer server.Close()
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
-	configData := []byte("cache_dir: " + filepath.Join(tempDir, "cache") + "\nembeddings:\n  base_url: " + embedServer.URL + "\n  model: qwen3-embedding\n  dimensions: 4096\nwebsites:\n  - " + server.URL + "\n")
+	configData := []byte("cache_dir: " + filepath.Join(tempDir, "cache") + "\nembeddings:\n  base_url: " + embedServer.URL + "\n  model: qwen3-embedding\n  dimensions: 4096\n  page_token_limit: 2\nwebsites:\n  - " + server.URL + "\n")
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -100,6 +109,9 @@ func TestRunEmbedBackfillsMissingEmbeddings(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "embedded_pages=") {
 		t.Fatalf("expected embedded pages status in stderr, got %q", stderr.String())
+	}
+	if len(gotInput) != 1 || gotInput[0] != "one two" {
+		t.Fatalf("expected capped embed input, got %v", gotInput)
 	}
 }
 

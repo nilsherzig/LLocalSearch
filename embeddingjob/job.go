@@ -16,23 +16,25 @@ import (
 )
 
 type Config struct {
-	DBPath     string
-	BaseURL    string
-	Model      string
-	Dimensions int
-	Timeout    time.Duration
-	BatchSize  int
-	Embedder   embedding.Client
-	Logger     *slog.Logger
-	Now        func() time.Time
+	DBPath         string
+	BaseURL        string
+	Model          string
+	Dimensions     int
+	Timeout        time.Duration
+	BatchSize      int
+	PageTokenLimit int
+	Embedder       embedding.Client
+	Logger         *slog.Logger
+	Now            func() time.Time
 }
 
 type Job struct {
-	db        *gorm.DB
-	embedder  embedding.Client
-	logger    *slog.Logger
-	now       func() time.Time
-	batchSize int
+	db             *gorm.DB
+	embedder       embedding.Client
+	logger         *slog.Logger
+	now            func() time.Time
+	batchSize      int
+	pageTokenLimit int
 }
 
 type Result struct {
@@ -44,6 +46,8 @@ type pendingPage struct {
 	ID      uint
 	Content string
 }
+
+const defaultPageTokenLimit = 3000
 
 func New(cfg Config) (*Job, error) {
 	if cfg.DBPath == "" {
@@ -66,6 +70,10 @@ func New(cfg Config) (*Job, error) {
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = 8
+	}
+	pageTokenLimit := cfg.PageTokenLimit
+	if pageTokenLimit <= 0 {
+		pageTokenLimit = defaultPageTokenLimit
 	}
 
 	embedder := cfg.Embedder
@@ -93,11 +101,12 @@ func New(cfg Config) (*Job, error) {
 	}
 
 	return &Job{
-		db:        db,
-		embedder:  embedder,
-		logger:    logger,
-		now:       now,
-		batchSize: batchSize,
+		db:             db,
+		embedder:       embedder,
+		logger:         logger,
+		now:            now,
+		batchSize:      batchSize,
+		pageTokenLimit: pageTokenLimit,
 	}, nil
 }
 
@@ -122,7 +131,7 @@ func (j *Job) Run(ctx context.Context) (Result, error) {
 
 		inputs := make([]string, 0, len(batch))
 		for _, page := range batch {
-			inputs = append(inputs, extractPlainText(page.Content))
+			inputs = append(inputs, extractPlainText(page.Content, j.pageTokenLimit))
 		}
 
 		batchStartedAt := time.Now()
@@ -205,7 +214,7 @@ func (j *Job) loadMissingBatch() ([]pendingPage, error) {
 	return pages, nil
 }
 
-func extractPlainText(content string) string {
+func extractPlainText(content string, tokenLimit int) string {
 	tokenizer := htmlnode.NewTokenizer(strings.NewReader(content))
 	var builder strings.Builder
 	for {
@@ -213,9 +222,9 @@ func extractPlainText(content string) string {
 		case htmlnode.ErrorToken:
 			text := strings.TrimSpace(strings.Join(strings.Fields(builder.String()), " "))
 			if text == "" {
-				return content
+				return limitTokens(content, tokenLimit)
 			}
-			return text
+			return limitTokens(text, tokenLimit)
 		case htmlnode.TextToken:
 			token := strings.TrimSpace(string(tokenizer.Text()))
 			if token == "" {
@@ -227,4 +236,17 @@ func extractPlainText(content string) string {
 			builder.WriteString(token)
 		}
 	}
+}
+
+// Apply a model-agnostic cap using normalized whitespace-delimited terms.
+func limitTokens(text string, tokenLimit int) string {
+	if tokenLimit <= 0 {
+		return text
+	}
+
+	tokens := strings.Fields(text)
+	if len(tokens) <= tokenLimit {
+		return strings.Join(tokens, " ")
+	}
+	return strings.Join(tokens[:tokenLimit], " ")
 }

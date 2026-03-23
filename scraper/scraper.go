@@ -39,12 +39,13 @@ type Config struct {
 }
 
 type EmbeddingConfig struct {
-	BaseURL    string   `yaml:"base_url"`
-	Model      string   `yaml:"model"`
-	Dimensions int      `yaml:"dimensions"`
-	Timeout    Duration `yaml:"timeout"`
-	QueueSize  int      `yaml:"queue_size"`
-	BatchSize  int      `yaml:"batch_size"`
+	BaseURL        string   `yaml:"base_url"`
+	Model          string   `yaml:"model"`
+	Dimensions     int      `yaml:"dimensions"`
+	Timeout        Duration `yaml:"timeout"`
+	QueueSize      int      `yaml:"queue_size"`
+	BatchSize      int      `yaml:"batch_size"`
+	PageTokenLimit int      `yaml:"page_token_limit"`
 }
 
 type SessionPageEvent struct {
@@ -467,6 +468,9 @@ func normalizeConfig(cfg Config) (Config, error) {
 	}
 	if normalized.Embeddings.BatchSize <= 0 {
 		normalized.Embeddings.BatchSize = 8
+	}
+	if normalized.Embeddings.PageTokenLimit <= 0 {
+		normalized.Embeddings.PageTokenLimit = 3000
 	}
 	if cfg.AllowedLanguages == nil {
 		normalized.AllowedLanguages = []string{"en"}

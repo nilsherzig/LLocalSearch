@@ -28,7 +28,7 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
-	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nallowed_languages:\n  - en\n  - de\nembeddings:\n  base_url: http://localhost:11434\n  model: qwen3-embedding\n  dimensions: 2560\n  timeout: 3s\n  queue_size: 7\n  batch_size: 5\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
+	configData := []byte("cache_dir: ./tmp/cache\nhost_delay: 25ms\nallowed_languages:\n  - en\n  - de\nembeddings:\n  base_url: http://localhost:11434\n  model: qwen3-embedding\n  dimensions: 2560\n  timeout: 3s\n  queue_size: 7\n  batch_size: 5\n  page_token_limit: 1234\nwebsites:\n  - example.com\n  - https://sub.example.org/start\n")
 
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -63,6 +63,9 @@ func TestLoadConfigParsesWhitelistAndCacheDir(t *testing.T) {
 	if cfg.Embeddings.BatchSize != 5 {
 		t.Fatalf("unexpected embedding batch size %d", cfg.Embeddings.BatchSize)
 	}
+	if cfg.Embeddings.PageTokenLimit != 1234 {
+		t.Fatalf("unexpected embedding page token limit %d", cfg.Embeddings.PageTokenLimit)
+	}
 
 	wantWebsites := []string{"https://example.com", "https://sub.example.org/start"}
 	if !slices.Equal(cfg.Websites, wantWebsites) {
@@ -92,6 +95,9 @@ func TestNormalizeConfigDefaultsEmbeddingWorkerSettings(t *testing.T) {
 	}
 	if cfg.Embeddings.BatchSize != 8 {
 		t.Fatalf("expected default batch size 8, got %d", cfg.Embeddings.BatchSize)
+	}
+	if cfg.Embeddings.PageTokenLimit != 3000 {
+		t.Fatalf("expected default page token limit 3000, got %d", cfg.Embeddings.PageTokenLimit)
 	}
 	if !slices.Equal(cfg.AllowedLanguages, []string{"en"}) {
 		t.Fatalf("expected default allowed languages [en], got %v", cfg.AllowedLanguages)

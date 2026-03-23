@@ -9,7 +9,7 @@ The main entrypoint is `llocalsearch` with three operating modes:
 - `llocalsearch scrape -config scraper.example.yaml`
   Scrapes the configured websites and writes cleaned pages directly to `saved_pages` in the SQLite database. This mode does not generate embeddings.
 - `llocalsearch embed -config scraper.example.yaml`
-  Runs the manual embedding backfill job. It finds all scraped pages that do not yet have an embedding and writes their vectors to `page_embeddings`.
+  Runs the manual embedding backfill job. It finds all scraped pages that do not yet have an embedding and writes their vectors to `page_embeddings`. Page content is capped to `embeddings.page_token_limit` terms before it is sent for embedding.
 - `llocalsearch web -config scraper.example.yaml`
   Starts the frontend and search server on `:8080` by default. The dashboard shows scrape counts and current embedding coverage.
 

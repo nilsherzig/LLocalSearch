@@ -82,6 +82,60 @@ func TestJobEmbedsOnlyPagesMissingEmbeddings(t *testing.T) {
 	}
 }
 
+func TestJobTruncatesPageContentToConfiguredTokenLimit(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "pages.db")
+
+	db, err := vectorstore.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open vector store: %v", err)
+	}
+	if err := db.AutoMigrate(&scraper.SavedPage{}); err != nil {
+		t.Fatalf("migrate saved pages: %v", err)
+	}
+	if err := vectorstore.EnsureSchema(db, "qwen3-embedding", 3); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	page := scraper.SavedPage{
+		URL:         "https://example.com/limited",
+		Host:        "example.com",
+		Path:        "/limited",
+		PageKey:     "limited",
+		ContentHash: "hash-limited",
+		ParseMode:   "readability",
+		Content:     "<article><h1>one two</h1><p>three four five</p></article>",
+		ScrapedAt:   time.Date(2026, 3, 23, 10, 2, 0, 0, time.UTC),
+	}
+	if err := db.Create(&page).Error; err != nil {
+		t.Fatalf("create page: %v", err)
+	}
+
+	embedder := &recordingEmbedder{
+		vectors: [][]float32{{0, 1, 0}},
+	}
+	job, err := New(Config{
+		DBPath:         dbPath,
+		BatchSize:      1,
+		Dimensions:     3,
+		Model:          "qwen3-embedding",
+		PageTokenLimit: 3,
+		Embedder:       embedder,
+		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	if _, err := job.Run(context.Background()); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if got := embedder.calls; len(got) != 1 || len(got[0]) != 1 || got[0][0] != "one two three" {
+		t.Fatalf("unexpected embedder calls: %v", got)
+	}
+}
+
 func TestJobLogsProgressAndTiming(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "pages.db")

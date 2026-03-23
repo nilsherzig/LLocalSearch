@@ -134,13 +134,14 @@ func runEmbed(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	job, err := embeddingjob.New(embeddingjob.Config{
-		DBPath:     filepath.Join(cfg.CacheDir, "pages.db"),
-		BaseURL:    cfg.Embeddings.BaseURL,
-		Model:      cfg.Embeddings.Model,
-		Dimensions: cfg.Embeddings.Dimensions,
-		Timeout:    time.Duration(cfg.Embeddings.Timeout),
-		BatchSize:  cfg.Embeddings.BatchSize,
-		Logger:     logger,
+		DBPath:         filepath.Join(cfg.CacheDir, "pages.db"),
+		BaseURL:        cfg.Embeddings.BaseURL,
+		Model:          cfg.Embeddings.Model,
+		Dimensions:     cfg.Embeddings.Dimensions,
+		Timeout:        time.Duration(cfg.Embeddings.Timeout),
+		BatchSize:      cfg.Embeddings.BatchSize,
+		PageTokenLimit: cfg.Embeddings.PageTokenLimit,
+		Logger:         logger,
 	})
 	if err != nil {
 		return fmt.Errorf("create embedding job: %w", err)

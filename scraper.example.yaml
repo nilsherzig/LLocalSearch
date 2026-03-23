@@ -12,6 +12,7 @@ embeddings:
   timeout: 30s
   queue_size: 2
   batch_size: 1
+  page_token_limit: 3000
 websites:
   - https://go-colly.org
   - https://book.kubebuilder.io
