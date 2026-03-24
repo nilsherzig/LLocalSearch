@@ -325,7 +325,7 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse url: %w", err)
 		}
-		parsedURL = stripURLFragment(parsedURL)
+		parsedURL = canonicalizePageURL(parsedURL)
 
 		host := normalizeHost(parsedURL.Hostname())
 		if !slices.Contains(s.websites, host) {
@@ -424,7 +424,7 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 			return
 		}
 
-		nextURL := stripURLFragmentString(e.Request.AbsoluteURL(e.Attr("href")))
+		nextURL := canonicalizePageURLString(e.Request.AbsoluteURL(e.Attr("href")))
 		if nextURL == "" {
 			return
 		}
@@ -760,6 +760,7 @@ func (s *Scraper) deletePagesForUnconfiguredHosts() error {
 }
 
 func buildSavedPage(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string, metadata PageMetadata) SavedPage {
+	parsedURL = canonicalizePageURL(parsedURL)
 	metadata = normalizePageMetadata(scrapeTime, metadata)
 	contentHash := hashContent(content)
 
@@ -873,7 +874,7 @@ func parseAndValidatePageURL(rawURL string) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse page url: %w", err)
 	}
-	parsedURL = stripURLFragment(parsedURL)
+	parsedURL = canonicalizePageURL(parsedURL)
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return nil, fmt.Errorf("unsupported page url scheme %q", parsedURL.Scheme)
 	}
@@ -957,6 +958,40 @@ func stripURLFragmentString(rawURL string) string {
 	}
 
 	return stripURLFragment(parsed).String()
+}
+
+func canonicalizePageURL(source *url.URL) *url.URL {
+	if source == nil {
+		return nil
+	}
+
+	normalized := stripURLFragment(source)
+	switch normalized.Path {
+	case "":
+	case "/":
+		normalized.Path = ""
+	default:
+		normalized.Path = strings.TrimRight(normalized.Path, "/")
+	}
+
+	switch normalized.RawPath {
+	case "":
+	case "/":
+		normalized.RawPath = ""
+	default:
+		normalized.RawPath = strings.TrimRight(normalized.RawPath, "/")
+	}
+
+	return normalized
+}
+
+func canonicalizePageURLString(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	return canonicalizePageURL(parsed).String()
 }
 
 func savedPageHost(page SavedPage) string {

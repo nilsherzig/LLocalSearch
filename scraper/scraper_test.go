@@ -959,6 +959,58 @@ func TestPageStoreSaveHTMLCaptureParsesHTMLAndPersistsBrowserMetadata(t *testing
 	}
 }
 
+func TestPageStoreSaveHTMLCaptureTreatsTrailingSlashVariantAsSamePage(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	store := NewPageStore(s.db)
+	firstResult, err := store.SaveHTMLCapture(HTMLCapture{
+		URL:        "https://example.com/integrations/conversation",
+		HTML:       []byte(`<html><body><article><h1>Conversation</h1><p>assistant docs</p></article></body></html>`),
+		Title:      "Conversation",
+		CapturedAt: time.Date(2026, 3, 24, 9, 10, 11, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("first SaveHTMLCapture returned error: %v", err)
+	}
+
+	secondResult, err := store.SaveHTMLCapture(HTMLCapture{
+		URL:        "https://example.com/integrations/conversation/",
+		HTML:       []byte(`<html><body><article><h1>Conversation</h1><p>assistant docs</p></article></body></html>`),
+		Title:      "Conversation",
+		CapturedAt: time.Date(2026, 3, 24, 10, 10, 11, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("second SaveHTMLCapture returned error: %v", err)
+	}
+
+	if !secondResult.Reused {
+		t.Fatal("expected trailing-slash variant to reuse existing saved page")
+	}
+	if firstResult.Page.ID != secondResult.Page.ID {
+		t.Fatalf("expected reused page id %d, got %d", firstResult.Page.ID, secondResult.Page.ID)
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(dbPages) != 1 {
+		t.Fatalf("expected one saved page after trailing-slash deduplication, got %d", len(dbPages))
+	}
+	if dbPages[0].URL != "https://example.com/integrations/conversation" {
+		t.Fatalf("expected canonical saved url without trailing slash, got %q", dbPages[0].URL)
+	}
+}
+
 func TestPageStoreSaveHTMLCaptureRejectsUnsupportedSchemes(t *testing.T) {
 	tempDir := t.TempDir()
 	cacheDir := filepath.Join(tempDir, "cache")
@@ -1506,6 +1558,64 @@ func TestFetchFallsBackWhenReadabilityParserHitsOpenStackLimit(t *testing.T) {
 	}
 	if !strings.Contains(pages[0].Content, "<pre") {
 		t.Fatalf("expected fallback content to be wrapped safely, got %q", pages[0].Content)
+	}
+}
+
+func TestFetchTreatsTrailingSlashVariantLinksAsSamePage(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`<html><body><a href="/integrations/conversation">without slash</a><a href="/integrations/conversation/">with slash</a></body></html>`))
+		case "/integrations/conversation", "/integrations/conversation/":
+			_, _ = w.Write([]byte(`<html><body><article><h1>Conversation</h1><p>shared docs</p></article></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{server.URL},
+	}, WithEmbedder(staticEmbedder{}))
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pages, err := s.Fetch(server.URL)
+	if err != nil {
+		t.Fatalf("Fetch returned error: %v", err)
+	}
+
+	conversationURLs := 0
+	for _, page := range pages {
+		if strings.Contains(page.URL, "/integrations/conversation") {
+			conversationURLs++
+			if page.URL != server.URL+"/integrations/conversation" {
+				t.Fatalf("expected canonical conversation url without trailing slash, got %q", page.URL)
+			}
+		}
+	}
+	if conversationURLs != 1 {
+		t.Fatalf("expected one saved conversation page, got %d pages: %+v", conversationURLs, pages)
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+
+	dbConversationURLs := 0
+	for _, page := range dbPages {
+		if strings.Contains(page.URL, "/integrations/conversation") {
+			dbConversationURLs++
+		}
+	}
+	if dbConversationURLs != 1 {
+		t.Fatalf("expected one conversation page in db, got %d", dbConversationURLs)
 	}
 }
 
