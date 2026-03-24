@@ -74,7 +74,7 @@
   <main>
     <section class="panel">
       <p><a href="/">Dashboard</a> · <a href="/pages">All pages</a></p>
-      <h1>Search downloaded pages</h1>
+      <h1>Search captured pages</h1>
       <form action="/search" method="get">
         <input id="q" name="q" type="search" value="{{.Query}}" placeholder="Search content, URLs, hosts...">
         <button type="submit">Search</button>
@@ -82,7 +82,7 @@
       {{if .Query}}
       <p class="muted">Results for "{{.Query}}"</p>
       {{else}}
-      <p class="muted">Enter a query to search through the scraped pages.</p>
+      <p class="muted">Enter a query to search through the captured pages.</p>
       {{end}}
     </section>
 
@@ -100,8 +100,9 @@
           {{end}}
           {{range .Results}}
           <article class="result">
-            <h2><a href="/pages/{{.Page.ID}}">{{.Page.URL}}</a></h2>
-            <p class="muted">{{.Page.Host}}{{.Page.Path}} · scraped {{.Page.ScrapedAt.Format "2006-01-02 15:04:05 MST"}} · Similarity: {{printf "%.4f" .Similarity}}</p>
+            <h2><a href="/pages/{{.Page.ID}}">{{if .Page.Title}}{{.Page.Title}}{{else}}{{.Page.URL}}{{end}}</a></h2>
+            <p class="muted">{{.Page.Host}}{{.Page.Path}} · {{.Page.SourceType}}{{if .Page.SourceBrowser}}/{{.Page.SourceBrowser}}{{end}} · captured {{.Page.CapturedAt.Format "2006-01-02 15:04:05 MST"}} · Similarity: {{printf "%.4f" .Similarity}}</p>
+            <p class="muted"><a href="{{.Page.URL}}">{{.Page.URL}}</a></p>
             <p>{{.Excerpt}}</p>
           </article>
           {{end}}

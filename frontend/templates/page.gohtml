@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Page.URL}}</title>
+  <title>{{if .Page.Title}}{{.Page.Title}}{{else}}{{.Page.URL}}{{end}}</title>
   <style>
     body {
       margin: 0;
@@ -38,8 +38,10 @@
   <main>
     <section class="meta">
       <p><a href="/">Dashboard</a> · <a href="/pages">All pages</a></p>
-      <h1>{{.Page.URL}}</h1>
-      <p>Scraped at {{.Page.ScrapedAt.Format "2006-01-02 15:04:05 MST"}}</p>
+      <h1>{{if .Page.Title}}{{.Page.Title}}{{else}}{{.Page.URL}}{{end}}</h1>
+      <p><a href="{{.Page.URL}}">{{.Page.URL}}</a></p>
+      <p>Source: {{.Page.SourceType}}{{if .Page.SourceBrowser}} · {{.Page.SourceBrowser}}{{end}}{{if .Page.SourceDeviceID}} · {{.Page.SourceDeviceID}}{{end}}</p>
+      <p>Captured at {{.Page.CapturedAt.Format "2006-01-02 15:04:05 MST"}}</p>
     </section>
     <section class="content">
       {{.Content}}

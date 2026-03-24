@@ -861,6 +861,131 @@ func TestSavePageRecordPersistsPageWithoutEmbedding(t *testing.T) {
 	}
 }
 
+func TestSavePageRecordDefaultsToScraperSourceMetadata(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	scrapedAt := time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC)
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	pageURL, err := url.Parse("https://example.com/article")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	result, err := s.savePageRecord(pageURL, scrapedAt, "<article><p>scraped page</p></article>", "readability")
+	if err != nil {
+		t.Fatalf("savePageRecord returned error: %v", err)
+	}
+
+	if result.Page.SourceType != SourceTypeScraper {
+		t.Fatalf("expected scraper source type, got %q", result.Page.SourceType)
+	}
+	if result.Page.SourceBrowser != "" {
+		t.Fatalf("expected empty source browser, got %q", result.Page.SourceBrowser)
+	}
+	if result.Page.SourceDeviceID != "" {
+		t.Fatalf("expected empty source device id, got %q", result.Page.SourceDeviceID)
+	}
+	if !result.Page.CapturedAt.Equal(scrapedAt) {
+		t.Fatalf("expected captured at %v, got %v", scrapedAt, result.Page.CapturedAt)
+	}
+}
+
+func TestPageStoreSaveHTMLCaptureParsesHTMLAndPersistsBrowserMetadata(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	capturedAt := time.Date(2026, 3, 24, 9, 10, 11, 0, time.UTC)
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	store := NewPageStore(s.db)
+	result, err := store.SaveHTMLCapture(HTMLCapture{
+		URL:            "https://example.com/app",
+		HTML:           []byte(`<html><head><title>Inbox</title></head><body><article><h1>Inbox</h1><p>Private messages</p></article></body></html>`),
+		SourceType:     SourceTypeBrowserExtension,
+		SourceBrowser:  "firefox",
+		SourceDeviceID: "device-1",
+		Title:          "Inbox",
+		CapturedAt:     capturedAt,
+	})
+	if err != nil {
+		t.Fatalf("SaveHTMLCapture returned error: %v", err)
+	}
+
+	if result.Page.SourceType != SourceTypeBrowserExtension {
+		t.Fatalf("expected browser source type, got %q", result.Page.SourceType)
+	}
+	if result.Page.SourceBrowser != "firefox" {
+		t.Fatalf("expected firefox source browser, got %q", result.Page.SourceBrowser)
+	}
+	if result.Page.SourceDeviceID != "device-1" {
+		t.Fatalf("expected source device id device-1, got %q", result.Page.SourceDeviceID)
+	}
+	if result.Page.Title != "Inbox" {
+		t.Fatalf("expected stored title Inbox, got %q", result.Page.Title)
+	}
+	if !result.Page.CapturedAt.Equal(capturedAt) {
+		t.Fatalf("expected captured at %v, got %v", capturedAt, result.Page.CapturedAt)
+	}
+	if result.Page.ParseMode != "readability" {
+		t.Fatalf("expected readability parse mode, got %q", result.Page.ParseMode)
+	}
+	if !strings.Contains(result.Page.Content, "Private messages") {
+		t.Fatalf("expected cleaned content to include browser page body, got %q", result.Page.Content)
+	}
+
+	dbPages, err := loadPagesFromDB(filepath.Join(cacheDir, "pages.db"))
+	if err != nil {
+		t.Fatalf("load pages from db: %v", err)
+	}
+	if len(dbPages) != 1 {
+		t.Fatalf("expected one saved page, got %d", len(dbPages))
+	}
+	if dbPages[0].ID != result.Page.ID {
+		t.Fatalf("expected saved page id %d, got %d", result.Page.ID, dbPages[0].ID)
+	}
+}
+
+func TestPageStoreSaveHTMLCaptureRejectsUnsupportedSchemes(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+
+	s, err := New(Config{
+		CacheDir: cacheDir,
+		Websites: []string{"https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	store := NewPageStore(s.db)
+	_, err = store.SaveHTMLCapture(HTMLCapture{
+		URL:        "file:///tmp/private.html",
+		HTML:       []byte(`<html><body><p>nope</p></body></html>`),
+		SourceType: SourceTypeBrowserExtension,
+		CapturedAt: time.Date(2026, 3, 24, 9, 10, 11, 0, time.UTC),
+	})
+	if err == nil {
+		t.Fatal("expected unsupported scheme error")
+	}
+	if !strings.Contains(err.Error(), "unsupported page url scheme") {
+		t.Fatalf("expected unsupported scheme error, got %v", err)
+	}
+}
+
 func TestFetchNotifiesSessionObserverOnSavedPage(t *testing.T) {
 	tempDir := t.TempDir()
 	cacheDir := filepath.Join(tempDir, "cache")

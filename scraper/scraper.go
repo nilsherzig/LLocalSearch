@@ -96,27 +96,67 @@ type Scraper struct {
 	now              func() time.Time
 	hostDelay        time.Duration
 	db               *gorm.DB
+	store            *PageStore
 	embedder         embedding.Client
 	observer         SessionObserver
 	saveMu           sync.Mutex
 }
 
 type SavedPage struct {
-	ID          uint      `gorm:"primaryKey"`
-	URL         string    `gorm:"not null;index;uniqueIndex:idx_saved_pages_url_hash"`
-	Host        string    `gorm:"not null;index"`
-	Path        string    `gorm:"not null"`
-	PageKey     string    `gorm:"not null;index"`
-	ContentHash string    `gorm:"not null;index;uniqueIndex:idx_saved_pages_url_hash"`
-	ParseMode   string    `gorm:"not null;default:readability"`
-	Content     string    `gorm:"type:text;not null"`
-	ScrapedAt   time.Time `gorm:"not null;index"`
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID             uint      `gorm:"primaryKey"`
+	URL            string    `gorm:"not null;index;uniqueIndex:idx_saved_pages_url_hash"`
+	Host           string    `gorm:"not null;index"`
+	Path           string    `gorm:"not null"`
+	Title          string    `gorm:"not null;default:''"`
+	PageKey        string    `gorm:"not null;index"`
+	ContentHash    string    `gorm:"not null;index;uniqueIndex:idx_saved_pages_url_hash"`
+	ParseMode      string    `gorm:"not null;default:readability"`
+	SourceType     string    `gorm:"not null;default:scraper;index"`
+	SourceBrowser  string    `gorm:"not null;default:'';index"`
+	SourceDeviceID string    `gorm:"not null;default:'';index"`
+	Content        string    `gorm:"type:text;not null"`
+	ScrapedAt      time.Time `gorm:"not null;index"`
+	CapturedAt     time.Time `gorm:"not null;index"`
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 const firefoxUserAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0"
 const skippedLanguageContextKey = "skipped_language"
+
+const (
+	SourceTypeScraper          = "scraper"
+	SourceTypeBrowserExtension = "browser_extension"
+)
+
+type PageMetadata struct {
+	Title          string
+	SourceType     string
+	SourceBrowser  string
+	SourceDeviceID string
+	CapturedAt     time.Time
+}
+
+type HTMLCapture struct {
+	URL            string
+	HTML           []byte
+	Title          string
+	SourceType     string
+	SourceBrowser  string
+	SourceDeviceID string
+	CapturedAt     time.Time
+}
+
+type SaveResult struct {
+	Page   SavedPage
+	Reused bool
+}
+
+type PageStore struct {
+	db     *gorm.DB
+	logger *slog.Logger
+	saveMu sync.Mutex
+}
 
 var nonHTMLResourceExtensions = map[string]struct{}{
 	".7z":   {},
@@ -216,9 +256,8 @@ func WithSessionObserver(observer SessionObserver) Option {
 }
 
 type saveResult struct {
-	Page              SavedPage
+	SaveResult
 	EmbeddingDuration time.Duration
-	Reused            bool
 }
 
 func New(cfg Config, opts ...Option) (*Scraper, error) {
@@ -263,6 +302,7 @@ func New(cfg Config, opts ...Option) (*Scraper, error) {
 		return nil, fmt.Errorf("migrate sqlite database: %w", err)
 	}
 	s.db = db
+	s.store = newPageStore(db, s.logger)
 	if err := s.deletePagesForUnconfiguredHosts(); err != nil {
 		return nil, err
 	}
@@ -349,7 +389,7 @@ func (s *Scraper) FetchAll(rawURLs []string) ([]SavedPage, error) {
 			s.observer.OnPageSaved(SessionPageEvent{
 				Page:              saveResult.Page,
 				EmbeddingDuration: saveResult.EmbeddingDuration,
-				Reused:            saveResult.Reused,
+				Reused:            saveResult.SaveResult.Reused,
 			})
 		}
 	})
@@ -658,73 +698,25 @@ func matchesAllowedLanguageTag(lang string, allowed []string) bool {
 }
 
 func (s *Scraper) saveReadablePage(pageURL string, body []byte, scrapeTime time.Time) (saveResult, error) {
-	parsedURL, err := url.ParseRequestURI(pageURL)
+	parsedURL, err := parseAndValidatePageURL(pageURL)
 	if err != nil {
-		return saveResult{}, fmt.Errorf("parse page url: %w", err)
+		return saveResult{}, err
 	}
-	parsedURL = stripURLFragment(parsedURL)
 
-	parser := readability.NewParser()
-	parser.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	article, err := parser.Parse(bytes.NewReader(body), parsedURL)
-	parseMode := "readability"
+	content, parseMode, err := parseReadableContent(s.logger, parsedURL, body)
 	if err != nil {
-		if isHTMLStackLimitError(err) {
-			s.logger.Warn("readability parser hit html stack limit, using raw fallback", "url", pageURL)
-			return s.savePageRecord(parsedURL, scrapeTime, safeRawHTMLFallback(body), "raw_fallback")
-		}
-		return saveResult{}, fmt.Errorf("parse readability content: %w", err)
+		return saveResult{}, err
 	}
 
-	var content bytes.Buffer
-	if err := article.RenderHTML(&content); err != nil {
-		return saveResult{}, fmt.Errorf("render cleaned html: %w", err)
-	}
-
-	return s.savePageRecord(parsedURL, scrapeTime, content.String(), parseMode)
+	return s.savePageRecord(parsedURL, scrapeTime, content, parseMode)
 }
 
 func (s *Scraper) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) (saveResult, error) {
-	s.saveMu.Lock()
-	defer s.saveMu.Unlock()
-
-	page := buildSavedPage(parsedURL, scrapeTime, content, parseMode)
-	if existing, ok, err := s.findSavedPage(page.URL, page.ContentHash); err != nil {
-		return saveResult{}, err
-	} else if ok {
-		return saveResult{Page: existing, Reused: true}, nil
-	}
-
-	var saved SavedPage
-	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		var stalePages []SavedPage
-		if err := tx.Where("url = ?", page.URL).Find(&stalePages).Error; err != nil {
-			return fmt.Errorf("load stale page versions: %w", err)
-		}
-
-		staleIDs := make([]uint, 0, len(stalePages))
-		for _, stalePage := range stalePages {
-			staleIDs = append(staleIDs, stalePage.ID)
-		}
-		if err := vectorstore.DeleteEmbeddings(tx, staleIDs); err != nil {
-			return err
-		}
-		if err := tx.Where("url = ?", page.URL).Delete(&SavedPage{}).Error; err != nil {
-			return fmt.Errorf("delete old page versions: %w", err)
-		}
-
-		pageToSave := page
-		if err := tx.Create(&pageToSave).Error; err != nil {
-			return fmt.Errorf("insert page: %w", err)
-		}
-		saved = pageToSave
-		return nil
-	}); err != nil {
+	result, err := s.store.savePageRecord(parsedURL, scrapeTime, content, parseMode, PageMetadata{})
+	if err != nil {
 		return saveResult{}, err
 	}
-
-	return saveResult{Page: saved}, nil
+	return saveResult{SaveResult: result}, nil
 }
 
 func (s *Scraper) logInfo(msg string, args ...any) {
@@ -767,19 +759,176 @@ func (s *Scraper) deletePagesForUnconfiguredHosts() error {
 	return nil
 }
 
-func buildSavedPage(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string) SavedPage {
+func buildSavedPage(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string, metadata PageMetadata) SavedPage {
+	metadata = normalizePageMetadata(scrapeTime, metadata)
 	contentHash := hashContent(content)
 
 	return SavedPage{
-		URL:         parsedURL.String(),
-		Host:        parsedURL.Host,
-		Path:        normalizedPagePath(parsedURL),
-		PageKey:     buildPageKey(parsedURL, scrapeTime),
-		ContentHash: contentHash,
-		ParseMode:   parseMode,
-		Content:     content,
-		ScrapedAt:   scrapeTime,
+		URL:            parsedURL.String(),
+		Host:           parsedURL.Host,
+		Path:           normalizedPagePath(parsedURL),
+		Title:          strings.TrimSpace(metadata.Title),
+		PageKey:        buildPageKey(parsedURL, scrapeTime),
+		ContentHash:    contentHash,
+		ParseMode:      parseMode,
+		SourceType:     metadata.SourceType,
+		SourceBrowser:  strings.TrimSpace(metadata.SourceBrowser),
+		SourceDeviceID: strings.TrimSpace(metadata.SourceDeviceID),
+		Content:        content,
+		ScrapedAt:      scrapeTime,
+		CapturedAt:     metadata.CapturedAt.UTC(),
 	}
+}
+
+func NewPageStore(db *gorm.DB) *PageStore {
+	return newPageStore(db, nil)
+}
+
+func newPageStore(db *gorm.DB, logger *slog.Logger) *PageStore {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return &PageStore{
+		db:     db,
+		logger: logger,
+	}
+}
+
+func (s *PageStore) SaveHTMLCapture(capture HTMLCapture) (SaveResult, error) {
+	if s == nil || s.db == nil {
+		return SaveResult{}, fmt.Errorf("page store database is required")
+	}
+
+	parsedURL, err := parseAndValidatePageURL(capture.URL)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	content, parseMode, err := parseReadableContent(s.logger, parsedURL, capture.HTML)
+	if err != nil {
+		return SaveResult{}, err
+	}
+
+	return s.savePageRecord(parsedURL, normalizeCaptureTime(capture.CapturedAt), content, parseMode, PageMetadata{
+		Title:          capture.Title,
+		SourceType:     capture.SourceType,
+		SourceBrowser:  capture.SourceBrowser,
+		SourceDeviceID: capture.SourceDeviceID,
+		CapturedAt:     capture.CapturedAt,
+	})
+}
+
+func (s *PageStore) savePageRecord(parsedURL *url.URL, scrapeTime time.Time, content string, parseMode string, metadata PageMetadata) (SaveResult, error) {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
+	page := buildSavedPage(parsedURL, scrapeTime, content, parseMode, metadata)
+	if existing, ok, err := s.findSavedPage(page.URL, page.ContentHash); err != nil {
+		return SaveResult{}, err
+	} else if ok {
+		return SaveResult{Page: existing, Reused: true}, nil
+	}
+
+	var saved SavedPage
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		var stalePages []SavedPage
+		if err := tx.Where("url = ?", page.URL).Find(&stalePages).Error; err != nil {
+			return fmt.Errorf("load stale page versions: %w", err)
+		}
+
+		staleIDs := make([]uint, 0, len(stalePages))
+		for _, stalePage := range stalePages {
+			staleIDs = append(staleIDs, stalePage.ID)
+		}
+		if err := vectorstore.DeleteEmbeddings(tx, staleIDs); err != nil {
+			return err
+		}
+		if err := tx.Where("url = ?", page.URL).Delete(&SavedPage{}).Error; err != nil {
+			return fmt.Errorf("delete old page versions: %w", err)
+		}
+
+		pageToSave := page
+		if err := tx.Create(&pageToSave).Error; err != nil {
+			return fmt.Errorf("insert page: %w", err)
+		}
+		saved = pageToSave
+		return nil
+	}); err != nil {
+		return SaveResult{}, err
+	}
+
+	return SaveResult{Page: saved}, nil
+}
+
+func (s *PageStore) findSavedPage(pageURL string, contentHash string) (SavedPage, bool, error) {
+	var existing SavedPage
+	result := s.db.Where("url = ? AND content_hash = ?", pageURL, contentHash).Limit(1).Find(&existing)
+	if result.Error != nil {
+		return SavedPage{}, false, fmt.Errorf("load existing page: %w", result.Error)
+	}
+	return existing, result.RowsAffected > 0, nil
+}
+
+func parseAndValidatePageURL(rawURL string) (*url.URL, error) {
+	parsedURL, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse page url: %w", err)
+	}
+	parsedURL = stripURLFragment(parsedURL)
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported page url scheme %q", parsedURL.Scheme)
+	}
+	if parsedURL.Host == "" {
+		return nil, errors.New("page url must include a host")
+	}
+	return parsedURL, nil
+}
+
+func parseReadableContent(logger *slog.Logger, pageURL *url.URL, body []byte) (string, string, error) {
+	parser := readability.NewParser()
+	parser.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	article, err := parser.Parse(bytes.NewReader(body), pageURL)
+	parseMode := "readability"
+	if err != nil {
+		if isHTMLStackLimitError(err) {
+			if logger != nil {
+				logger.Warn("readability parser hit html stack limit, using raw fallback", "url", pageURL.String())
+			}
+			return safeRawHTMLFallback(body), "raw_fallback", nil
+		}
+		return "", "", fmt.Errorf("parse readability content: %w", err)
+	}
+
+	var content bytes.Buffer
+	if err := article.RenderHTML(&content); err != nil {
+		return "", "", fmt.Errorf("render cleaned html: %w", err)
+	}
+
+	return content.String(), parseMode, nil
+}
+
+func normalizeCaptureTime(capturedAt time.Time) time.Time {
+	if capturedAt.IsZero() {
+		return time.Now().UTC()
+	}
+	return capturedAt.UTC()
+}
+
+func normalizePageMetadata(scrapeTime time.Time, metadata PageMetadata) PageMetadata {
+	normalized := metadata
+	normalized.Title = strings.TrimSpace(metadata.Title)
+	normalized.SourceType = strings.TrimSpace(metadata.SourceType)
+	normalized.SourceBrowser = strings.TrimSpace(metadata.SourceBrowser)
+	normalized.SourceDeviceID = strings.TrimSpace(metadata.SourceDeviceID)
+	if normalized.SourceType == "" {
+		normalized.SourceType = SourceTypeScraper
+	}
+	if normalized.CapturedAt.IsZero() {
+		normalized.CapturedAt = scrapeTime.UTC()
+	} else {
+		normalized.CapturedAt = normalized.CapturedAt.UTC()
+	}
+	return normalized
 }
 
 func cloneURL(source *url.URL) *url.URL {
@@ -815,15 +964,6 @@ func savedPageHost(page SavedPage) string {
 		return host
 	}
 	return normalizeHost(mustHostname(page.URL))
-}
-
-func (s *Scraper) findSavedPage(pageURL string, contentHash string) (SavedPage, bool, error) {
-	var existing SavedPage
-	result := s.db.Where("url = ? AND content_hash = ?", pageURL, contentHash).Limit(1).Find(&existing)
-	if result.Error != nil {
-		return SavedPage{}, false, fmt.Errorf("load existing page: %w", result.Error)
-	}
-	return existing, result.RowsAffected > 0, nil
 }
 
 func isHTMLStackLimitError(err error) bool {

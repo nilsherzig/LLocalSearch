@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLocalSearch Firefox Capture Options</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f0e8;
+      --panel: #fffdf9;
+      --text: #1d1d1b;
+      --muted: #736f68;
+      --accent: #1c6e5b;
+      --border: #ded6ca;
+    }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: linear-gradient(180deg, #efe7da 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 36px 20px 72px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(29, 29, 27, 0.06);
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font: inherit;
+      margin-bottom: 16px;
+    }
+    button {
+      padding: 12px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fffdf9;
+      font: inherit;
+      cursor: pointer;
+    }
+    .muted {
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <h1>LLocalSearch Firefox Capture</h1>
+      <p class="muted">The extension uploads final page DOM snapshots to your local LLocalSearch instance after pages finish rendering.</p>
+      <form id="settings-form">
+        <label for="server-base-url">LLocalSearch server base URL</label>
+        <input id="server-base-url" name="server-base-url" type="url" placeholder="http://127.0.0.1:8080">
+
+        <label for="device-id">Local device ID</label>
+        <input id="device-id" name="device-id" type="text" readonly>
+
+        <p id="endpoint-preview" class="muted"></p>
+        <button type="submit">Save</button>
+      </form>
+      <p id="status" class="muted" aria-live="polite"></p>
+    </section>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

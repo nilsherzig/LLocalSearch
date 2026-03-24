@@ -37,6 +37,7 @@ type Config struct {
 
 type Server struct {
 	db             *gorm.DB
+	pageStore      *scraper.PageStore
 	embedder       embedding.Client
 	summarizer     summary.Client
 	logger         *slog.Logger
@@ -52,13 +53,17 @@ type countSummary struct {
 }
 
 type dashboardData struct {
-	TotalPages        int64
-	EmbeddedPages     int64
-	EmbeddingProgress int
-	LatestScraped     string
-	RecentPages       []scraper.SavedPage
-	PagesPerHost      []countSummary
-	PagesPerWhitelist []countSummary
+	TotalPages            int64
+	EmbeddedPages         int64
+	EmbeddingProgress     int
+	LatestScraped         string
+	LatestBrowserCapture  string
+	BrowserIngestEndpoint string
+	RecentPages           []scraper.SavedPage
+	RecentBrowserPages    []scraper.SavedPage
+	PagesPerHost          []countSummary
+	PagesPerWhitelist     []countSummary
+	PagesPerSource        []countSummary
 }
 
 type pagesData struct {
@@ -89,26 +94,54 @@ type searchAPIResponse struct {
 }
 
 type searchAPIResultEntry struct {
-	ID         uint      `json:"id"`
-	URL        string    `json:"url"`
-	Host       string    `json:"host"`
-	Path       string    `json:"path"`
-	ScrapedAt  time.Time `json:"scraped_at"`
-	Excerpt    string    `json:"excerpt"`
-	Similarity float64   `json:"similarity"`
+	ID             uint      `json:"id"`
+	URL            string    `json:"url"`
+	Host           string    `json:"host"`
+	Path           string    `json:"path"`
+	Title          string    `json:"title"`
+	ScrapedAt      time.Time `json:"scraped_at"`
+	CapturedAt     time.Time `json:"captured_at"`
+	SourceType     string    `json:"source_type"`
+	SourceBrowser  string    `json:"source_browser"`
+	SourceDeviceID string    `json:"source_device_id"`
+	Excerpt        string    `json:"excerpt"`
+	Similarity     float64   `json:"similarity"`
 }
 
 type pageAPIResponse struct {
-	ID        uint      `json:"id"`
-	URL       string    `json:"url"`
-	Host      string    `json:"host"`
-	Path      string    `json:"path"`
-	ScrapedAt time.Time `json:"scraped_at"`
-	Content   string    `json:"content"`
+	ID             uint      `json:"id"`
+	URL            string    `json:"url"`
+	Host           string    `json:"host"`
+	Path           string    `json:"path"`
+	Title          string    `json:"title"`
+	ScrapedAt      time.Time `json:"scraped_at"`
+	CapturedAt     time.Time `json:"captured_at"`
+	SourceType     string    `json:"source_type"`
+	SourceBrowser  string    `json:"source_browser"`
+	SourceDeviceID string    `json:"source_device_id"`
+	Content        string    `json:"content"`
 }
 
 type errorResponse struct {
 	Error string `json:"error"`
+}
+
+type browserIngestRequest struct {
+	URL        string    `json:"url"`
+	FinalURL   string    `json:"final_url"`
+	Title      string    `json:"title"`
+	CapturedAt time.Time `json:"captured_at"`
+	HTML       string    `json:"html"`
+	Browser    string    `json:"browser"`
+	DeviceID   string    `json:"device_id"`
+}
+
+type browserIngestResponse struct {
+	ID         uint      `json:"id"`
+	URL        string    `json:"url"`
+	Reused     bool      `json:"reused"`
+	SourceType string    `json:"source_type"`
+	CapturedAt time.Time `json:"captured_at"`
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -170,6 +203,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	server := &Server{
 		db:             db,
+		pageStore:      scraper.NewPageStore(db),
 		embedder:       embedder,
 		summarizer:     summarizer,
 		logger:         logger,
@@ -184,6 +218,7 @@ func NewServer(cfg Config) (*Server, error) {
 	server.mux.HandleFunc("/search", server.handleSearch)
 	server.mux.HandleFunc("/api/search", server.handleSearchAPI)
 	server.mux.HandleFunc("/api/pages/", server.handlePageContentAPI)
+	server.mux.HandleFunc("/api/ingest/browser-pages", server.handleBrowserIngestAPI)
 
 	return server, nil
 }
@@ -229,20 +264,28 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	recentBrowserPages, latestBrowserCapture := summarizeRecentBrowserPages(allPages)
 
 	latestScraped := "n/a"
 	if len(recentPages) > 0 {
 		latestScraped = recentPages[0].ScrapedAt.Format(time.RFC3339)
 	}
+	if latestBrowserCapture == "" {
+		latestBrowserCapture = "n/a"
+	}
 
 	data := dashboardData{
-		TotalPages:        total,
-		EmbeddedPages:     embeddedPages,
-		EmbeddingProgress: embeddingProgressPercent(total, embeddedPages),
-		LatestScraped:     latestScraped,
-		RecentPages:       recentPages,
-		PagesPerHost:      summarizePagesPerHost(allPages, embeddedPageIDs),
-		PagesPerWhitelist: summarizePagesPerWhitelist(allPages, embeddedPageIDs, s.whitelistPages),
+		TotalPages:            total,
+		EmbeddedPages:         embeddedPages,
+		EmbeddingProgress:     embeddingProgressPercent(total, embeddedPages),
+		LatestScraped:         latestScraped,
+		LatestBrowserCapture:  latestBrowserCapture,
+		BrowserIngestEndpoint: "/api/ingest/browser-pages",
+		RecentPages:           recentPages,
+		RecentBrowserPages:    recentBrowserPages,
+		PagesPerHost:          summarizePagesPerHost(allPages, embeddedPageIDs),
+		PagesPerWhitelist:     summarizePagesPerWhitelist(allPages, embeddedPageIDs, s.whitelistPages),
+		PagesPerSource:        summarizePagesPerSource(allPages, embeddedPageIDs),
 	}
 
 	s.logger.Info("serve dashboard", "total_pages", total)
@@ -333,6 +376,41 @@ func summarizePagesPerWhitelist(pages []scraper.SavedPage, embeddedPageIDs map[u
 	}
 
 	return summaries
+}
+
+func summarizePagesPerSource(pages []scraper.SavedPage, embeddedPageIDs map[uint]struct{}) []countSummary {
+	counts := make(map[string]countSummary)
+	for _, page := range pages {
+		label := sourceLabel(page)
+		summary := counts[label]
+		summary.Label = label
+		summary.ScrapedCount++
+		if _, ok := embeddedPageIDs[page.ID]; ok {
+			summary.EmbeddedCount++
+		}
+		counts[label] = summary
+	}
+	return sortedSummaries(counts)
+}
+
+func summarizeRecentBrowserPages(pages []scraper.SavedPage) ([]scraper.SavedPage, string) {
+	browserPages := make([]scraper.SavedPage, 0)
+	for _, page := range pages {
+		if page.SourceType != scraper.SourceTypeBrowserExtension {
+			continue
+		}
+		browserPages = append(browserPages, page)
+	}
+	slices.SortFunc(browserPages, func(a, b scraper.SavedPage) int {
+		return b.CapturedAt.Compare(a.CapturedAt)
+	})
+	if len(browserPages) == 0 {
+		return nil, ""
+	}
+	if len(browserPages) > 5 {
+		browserPages = browserPages[:5]
+	}
+	return browserPages, browserPages[0].CapturedAt.Format(time.RFC3339)
 }
 
 func whitelistMatchesPage(seed string, page scraper.SavedPage) bool {
@@ -460,13 +538,18 @@ func (s *Server) handleSearchAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, result := range results {
 		response.Results = append(response.Results, searchAPIResultEntry{
-			ID:         result.Page.ID,
-			URL:        result.Page.URL,
-			Host:       result.Page.Host,
-			Path:       result.Page.Path,
-			ScrapedAt:  result.Page.ScrapedAt,
-			Excerpt:    result.Excerpt,
-			Similarity: result.Similarity,
+			ID:             result.Page.ID,
+			URL:            result.Page.URL,
+			Host:           result.Page.Host,
+			Path:           result.Page.Path,
+			Title:          result.Page.Title,
+			ScrapedAt:      result.Page.ScrapedAt,
+			CapturedAt:     result.Page.CapturedAt,
+			SourceType:     result.Page.SourceType,
+			SourceBrowser:  result.Page.SourceBrowser,
+			SourceDeviceID: result.Page.SourceDeviceID,
+			Excerpt:        result.Excerpt,
+			Similarity:     result.Similarity,
 		})
 	}
 
@@ -488,12 +571,85 @@ func (s *Server) handlePageContentAPI(w http.ResponseWriter, r *http.Request) {
 
 	s.logger.Info("serve page api", "id", page.ID, "url", page.URL)
 	writeJSON(w, http.StatusOK, pageAPIResponse{
-		ID:        page.ID,
-		URL:       page.URL,
-		Host:      page.Host,
-		Path:      page.Path,
-		ScrapedAt: page.ScrapedAt,
-		Content:   page.Content,
+		ID:             page.ID,
+		URL:            page.URL,
+		Host:           page.Host,
+		Path:           page.Path,
+		Title:          page.Title,
+		ScrapedAt:      page.ScrapedAt,
+		CapturedAt:     page.CapturedAt,
+		SourceType:     page.SourceType,
+		SourceBrowser:  page.SourceBrowser,
+		SourceDeviceID: page.SourceDeviceID,
+		Content:        page.Content,
+	})
+}
+
+func (s *Server) handleBrowserIngestAPI(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/ingest/browser-pages" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	var request browserIngestRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 10<<20))
+	if err := decoder.Decode(&request); err != nil {
+		status := http.StatusBadRequest
+		message := "invalid request body"
+		if strings.Contains(strings.ToLower(err.Error()), "too large") {
+			status = http.StatusRequestEntityTooLarge
+			message = "request body too large"
+		}
+		writeJSON(w, status, errorResponse{Error: message})
+		return
+	}
+
+	rawURL := strings.TrimSpace(request.FinalURL)
+	if rawURL == "" {
+		rawURL = strings.TrimSpace(request.URL)
+	}
+	if strings.TrimSpace(rawURL) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "page url is required"})
+		return
+	}
+	if strings.TrimSpace(request.HTML) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "html is required"})
+		return
+	}
+
+	result, err := s.pageStore.SaveHTMLCapture(scraper.HTMLCapture{
+		URL:            rawURL,
+		HTML:           []byte(request.HTML),
+		Title:          request.Title,
+		SourceType:     scraper.SourceTypeBrowserExtension,
+		SourceBrowser:  strings.TrimSpace(request.Browser),
+		SourceDeviceID: strings.TrimSpace(request.DeviceID),
+		CapturedAt:     request.CapturedAt,
+	})
+	if err != nil {
+		s.logger.Error("browser ingest failed", "url", rawURL, "err", err)
+		if isBrowserIngestBadRequest(err) {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: browserIngestErrorMessage(err)})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal server error"})
+		return
+	}
+
+	status := http.StatusCreated
+	if result.Reused {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, browserIngestResponse{
+		ID:         result.Page.ID,
+		URL:        result.Page.URL,
+		Reused:     result.Reused,
+		SourceType: result.Page.SourceType,
+		CapturedAt: result.Page.CapturedAt,
 	})
 }
 
@@ -668,6 +824,44 @@ func extractPlainText(content string) string {
 			builder.WriteString(text)
 		}
 	}
+}
+
+func sourceLabel(page scraper.SavedPage) string {
+	if page.SourceType == scraper.SourceTypeBrowserExtension {
+		browser := strings.TrimSpace(page.SourceBrowser)
+		if browser != "" {
+			return strings.Title(browser)
+		}
+		return "Browser Extension"
+	}
+	return "Scraper"
+}
+
+func isBrowserIngestBadRequest(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unsupported page url scheme") ||
+		strings.Contains(message, "page url must include a host") ||
+		strings.Contains(message, "parse page url")
+}
+
+func browserIngestErrorMessage(err error) string {
+	if err == nil {
+		return "invalid browser ingest request"
+	}
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "unsupported page url scheme") {
+		return "unsupported page url scheme"
+	}
+	if strings.Contains(message, "page url must include a host") {
+		return "page url must include a host"
+	}
+	if strings.Contains(message, "parse page url") {
+		return "invalid page url"
+	}
+	return "invalid browser ingest request"
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

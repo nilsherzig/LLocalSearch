@@ -1,0 +1,40 @@
+{
+  "manifest_version": 2,
+  "name": "LLocalSearch Firefox Capture",
+  "version": "0.1.0",
+  "description": "Captures visited pages after load and uploads them to the local LLocalSearch ingest endpoint.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webNavigation",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "persistent": false
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "llocalsearch-firefox@nilsherzig.github"
+    }
+  }
+}

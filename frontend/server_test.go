@@ -79,6 +79,12 @@ func TestIndexHandlerShowsDashboardMetrics(t *testing.T) {
 	if !strings.Contains(body, `aria-valuenow="66"`) {
 		t.Fatalf("expected embedding progress value in dashboard, got %q", body)
 	}
+	if !strings.Contains(body, "Firefox browser ingest") {
+		t.Fatalf("expected browser ingest setup panel, got %q", body)
+	}
+	if !strings.Contains(body, "/api/ingest/browser-pages") {
+		t.Fatalf("expected browser ingest endpoint hint, got %q", body)
+	}
 }
 
 func TestPagesHandlerListsScrapedPages(t *testing.T) {
@@ -329,6 +335,149 @@ func TestSearchAPIHandlerReturnsJSONResults(t *testing.T) {
 	}
 }
 
+func TestSearchAPIHandlerIncludesSourceMetadata(t *testing.T) {
+	server, dbPath := newTestServer(t)
+	if err := server.db.Model(&scraper.SavedPage{}).Where("id = ?", 1).Updates(map[string]any{
+		"title":            "Inbox",
+		"source_type":      scraper.SourceTypeBrowserExtension,
+		"source_browser":   "firefox",
+		"source_device_id": "device-1",
+		"captured_at":      time.Date(2026, 3, 24, 8, 0, 0, 0, time.UTC),
+	}).Error; err != nil {
+		t.Fatalf("update page source metadata: %v", err)
+	}
+	if err := insertTestEmbedding(dbPath, 1, vectorWithLead(1, 0, 0)); err != nil {
+		t.Fatalf("insert first embedding: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=kubernetes+guide", nil)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d", rec.Code)
+	}
+
+	var response searchAPIResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Results) == 0 {
+		t.Fatalf("expected at least one search result, got %+v", response)
+	}
+	if response.Results[0].SourceType != scraper.SourceTypeBrowserExtension {
+		t.Fatalf("expected browser source type, got %q", response.Results[0].SourceType)
+	}
+	if response.Results[0].SourceBrowser != "firefox" {
+		t.Fatalf("expected firefox source browser, got %q", response.Results[0].SourceBrowser)
+	}
+	if response.Results[0].SourceDeviceID != "device-1" {
+		t.Fatalf("expected device id device-1, got %q", response.Results[0].SourceDeviceID)
+	}
+	if response.Results[0].Title != "Inbox" {
+		t.Fatalf("expected title Inbox, got %q", response.Results[0].Title)
+	}
+}
+
+func TestBrowserIngestAPIStoresCapturedPage(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	body := strings.NewReader(`{
+		"url":"https://portal.example.com/inbox",
+		"final_url":"https://portal.example.com/inbox",
+		"title":"Inbox",
+		"captured_at":"2026-03-24T09:10:11Z",
+		"html":"<html><body><article><h1>Inbox</h1><p>Private messages</p></article></body></html>",
+		"browser":"firefox",
+		"device_id":"device-1"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/browser-pages", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("unexpected status %d with body %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+
+	var response struct {
+		ID         uint      `json:"id"`
+		URL        string    `json:"url"`
+		Reused     bool      `json:"reused"`
+		SourceType string    `json:"source_type"`
+		CapturedAt time.Time `json:"captured_at"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.ID == 0 {
+		t.Fatalf("expected saved page id, got %+v", response)
+	}
+	if response.URL != "https://portal.example.com/inbox" {
+		t.Fatalf("expected saved url, got %q", response.URL)
+	}
+	if response.Reused {
+		t.Fatalf("expected newly created page, got %+v", response)
+	}
+	if response.SourceType != scraper.SourceTypeBrowserExtension {
+		t.Fatalf("expected browser source type, got %q", response.SourceType)
+	}
+	if !response.CapturedAt.Equal(time.Date(2026, 3, 24, 9, 10, 11, 0, time.UTC)) {
+		t.Fatalf("unexpected captured at %v", response.CapturedAt)
+	}
+
+	var page scraper.SavedPage
+	if err := server.db.First(&page, response.ID).Error; err != nil {
+		t.Fatalf("load stored page: %v", err)
+	}
+	if page.SourceType != scraper.SourceTypeBrowserExtension {
+		t.Fatalf("expected stored source type %q, got %q", scraper.SourceTypeBrowserExtension, page.SourceType)
+	}
+	if page.SourceBrowser != "firefox" {
+		t.Fatalf("expected stored source browser firefox, got %q", page.SourceBrowser)
+	}
+	if page.SourceDeviceID != "device-1" {
+		t.Fatalf("expected stored device id device-1, got %q", page.SourceDeviceID)
+	}
+	if page.Title != "Inbox" {
+		t.Fatalf("expected stored title Inbox, got %q", page.Title)
+	}
+	if !strings.Contains(page.Content, "Private messages") {
+		t.Fatalf("expected cleaned stored content, got %q", page.Content)
+	}
+}
+
+func TestBrowserIngestAPIRejectsUnsupportedSchemes(t *testing.T) {
+	server, _ := newTestServer(t)
+
+	body := strings.NewReader(`{
+		"url":"about:config",
+		"final_url":"about:config",
+		"title":"Config",
+		"captured_at":"2026-03-24T09:10:11Z",
+		"html":"<html><body><p>Config</p></body></html>",
+		"browser":"firefox",
+		"device_id":"device-1"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/browser-pages", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status %d with body %q", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"error":"unsupported page url scheme"`) {
+		t.Fatalf("expected unsupported scheme error, got %q", rec.Body.String())
+	}
+}
+
 func TestPageContentAPIHandlerReturnsFullPageContent(t *testing.T) {
 	server, _ := newTestServer(t)
 
@@ -439,31 +588,37 @@ func newTestServer(t *testing.T, overrides ...testServerOptions) (*Server, strin
 	scrapedAt := time.Date(2026, 3, 23, 10, 11, 12, 0, time.UTC)
 	pages := []scraper.SavedPage{
 		{
-			ID:        1,
-			URL:       "https://example.com/article",
-			Host:      "example.com",
-			Path:      "/article",
-			PageKey:   "example.com%2Farticle_20260323T101112Z",
-			Content:   "<article><p>clean article body</p></article>",
-			ScrapedAt: scrapedAt,
+			ID:         1,
+			URL:        "https://example.com/article",
+			Host:       "example.com",
+			Path:       "/article",
+			PageKey:    "example.com%2Farticle_20260323T101112Z",
+			Content:    "<article><p>clean article body</p></article>",
+			ScrapedAt:  scrapedAt,
+			CapturedAt: scrapedAt,
+			SourceType: scraper.SourceTypeScraper,
 		},
 		{
-			ID:        2,
-			URL:       "https://example.com/second",
-			Host:      "example.com",
-			Path:      "/second",
-			PageKey:   "example.com%2Fsecond_20260323T101112Z",
-			Content:   "<article><p>second body</p></article>",
-			ScrapedAt: scrapedAt.Add(5 * time.Minute),
+			ID:         2,
+			URL:        "https://example.com/second",
+			Host:       "example.com",
+			Path:       "/second",
+			PageKey:    "example.com%2Fsecond_20260323T101112Z",
+			Content:    "<article><p>second body</p></article>",
+			ScrapedAt:  scrapedAt.Add(5 * time.Minute),
+			CapturedAt: scrapedAt.Add(5 * time.Minute),
+			SourceType: scraper.SourceTypeScraper,
 		},
 		{
-			ID:        3,
-			URL:       "https://news.example.org/start/post",
-			Host:      "news.example.org",
-			Path:      "/start/post",
-			PageKey:   "news.example.org%2Fstart%2Fpost_20260323T101112Z",
-			Content:   "<article><p>third body</p></article>",
-			ScrapedAt: scrapedAt.Add(10 * time.Minute),
+			ID:         3,
+			URL:        "https://news.example.org/start/post",
+			Host:       "news.example.org",
+			Path:       "/start/post",
+			PageKey:    "news.example.org%2Fstart%2Fpost_20260323T101112Z",
+			Content:    "<article><p>third body</p></article>",
+			ScrapedAt:  scrapedAt.Add(10 * time.Minute),
+			CapturedAt: scrapedAt.Add(10 * time.Minute),
+			SourceType: scraper.SourceTypeScraper,
 		},
 	}
 	if err := db.Create(&pages).Error; err != nil {

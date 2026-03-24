@@ -4,6 +4,7 @@ pkgs.mkShell {
   packages = with pkgs; [
     gcc
     gnumake
+    zip
     go
     pkg-config
     sqlite

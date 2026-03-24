@@ -36,20 +36,20 @@
 <body>
   <main>
     <div class="panel">
-      <h1>Scraped pages</h1>
+      <h1>Captured pages</h1>
       <p><a href="/">Back to dashboard</a></p>
       <ul>
         {{range .Pages}}
         <li>
-          <a href="/pages/{{.ID}}">{{.Host}}{{.Path}}</a>
+          <a href="/pages/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.Host}}{{.Path}}{{end}}</a>
           <div>{{.URL}}</div>
+          <div>{{.SourceType}}{{if .SourceBrowser}} · {{.SourceBrowser}}{{end}} · captured {{.CapturedAt.Format "2006-01-02 15:04:05 MST"}}</div>
         </li>
         {{else}}
-        <li>No pages scraped yet.</li>
+        <li>No pages captured yet.</li>
         {{end}}
       </ul>
     </div>
   </main>
 </body>
 </html>
-

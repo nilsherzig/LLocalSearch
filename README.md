@@ -1,6 +1,6 @@
 # LLocalSearch
 
-LLocalSearch scrapes configured websites, stores cleaned page content locally, and exposes a frontend search server.
+LLocalSearch scrapes configured websites, stores cleaned page content locally, accepts browser-captured page uploads, and exposes a frontend search server.
 
 ## Subcommands
 
@@ -11,7 +11,7 @@ The main entrypoint is `llocalsearch` with three operating modes:
 - `llocalsearch embed -config scraper.example.yaml`
   Runs the manual embedding backfill job. It finds all scraped pages that do not yet have an embedding and writes their vectors to `page_embeddings`. Page content is capped using an approximate character-based token limit from `embeddings.page_token_limit` before it is sent for embedding.
 - `llocalsearch web -config scraper.example.yaml`
-  Starts the frontend and search server on `:8080` by default. The dashboard shows scrape counts and current embedding coverage.
+  Starts the frontend, search server, and browser-ingest API on `:8080` by default. The dashboard shows scrape counts, browser ingest status, and current embedding coverage.
 
 Typical flow:
 
@@ -23,6 +23,38 @@ go run ./cmd/llocalsearch web -config scraper.example.yaml
 
 `web` and search require a valid `embeddings` configuration because query embeddings are generated at request time. `scrape` can run without any embedding configuration.
 
+## Browser Ingest
+
+The `web` server now also accepts browser-captured pages:
+
+- `POST /api/ingest/browser-pages`
+
+This is intended for the Firefox extension in `browser/firefox`. The extension captures the final DOM after page load and uploads it to the local server, which allows indexing:
+
+- login-protected pages after the user has already signed in
+- JS-rendered pages that the crawler would miss
+- pages visited after the extension has been installed
+
+Browser-ingested pages are stored in the same `saved_pages` table as crawler results, with additional source metadata such as `source_type`, `source_browser`, `source_device_id`, `title`, and `captured_at`.
+
+Embeddings are still generated separately through:
+
+```sh
+make embed
+```
+
+### Firefox Extension
+
+The Firefox extension is dependency-free. Load it temporarily in Firefox via `about:debugging#/runtime/this-firefox` by selecting `browser/firefox/manifest.json`.
+
+To package it as a zip:
+
+```sh
+make firefox-extension
+```
+
+This writes `dist/llocalsearch-firefox.zip`.
+
 ## Make Targets
 
 Convenience targets:
@@ -30,6 +62,7 @@ Convenience targets:
 - `make scrape`
 - `make embed`
 - `make web`
+- `make firefox-extension`
 - `make start-ollama`
 
 Override defaults if needed:
@@ -46,6 +79,7 @@ The frontend server now exposes a JSON search endpoint alongside the HTML UI:
 
 - `GET /api/search?q=<query>`
 - `GET /api/pages/<id>`
+- `POST /api/ingest/browser-pages`
 
 The response contains the normalized query and a list of matching pages ordered by vector similarity.
 
@@ -60,7 +94,12 @@ Example response:
       "url": "https://example.com/article",
       "host": "example.com",
       "path": "/article",
+      "title": "Article",
       "scraped_at": "2026-03-23T10:11:12Z",
+      "captured_at": "2026-03-23T10:11:12Z",
+      "source_type": "scraper",
+      "source_browser": "",
+      "source_device_id": "",
       "excerpt": "clean article body",
       "similarity": 0.9821
     }
@@ -76,7 +115,12 @@ Use the `id` from a search result to fetch the full stored page content:
   "url": "https://example.com/article",
   "host": "example.com",
   "path": "/article",
+  "title": "Article",
   "scraped_at": "2026-03-23T10:11:12Z",
+  "captured_at": "2026-03-23T10:11:12Z",
+  "source_type": "scraper",
+  "source_browser": "",
+  "source_device_id": "",
   "content": "<article><p>clean article body</p></article>"
 }
 ```
@@ -113,4 +157,20 @@ Search with URL-encoded spaces and punctuation:
 
 ```sh
 curl "http://localhost:8080/api/search?q=sqlite-vec%20cosine%20distance"
+```
+
+Upload a browser-captured page manually:
+
+```sh
+curl -X POST "http://localhost:8080/api/ingest/browser-pages" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url":"https://example.com/private",
+    "final_url":"https://example.com/private",
+    "title":"Private Example",
+    "captured_at":"2026-03-24T09:10:11Z",
+    "html":"<html><body><article><p>private content</p></article></body></html>",
+    "browser":"firefox",
+    "device_id":"demo-device"
+  }'
 ```

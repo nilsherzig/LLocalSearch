@@ -134,6 +134,7 @@
         </div>
       </div>
       <p class="muted">Latest scrape: {{.LatestScraped}}</p>
+      <p class="muted">Latest browser capture: {{.LatestBrowserCapture}}</p>
       <div class="progress-card">
         <div class="progress-head">
           <span class="progress-label">Embedding coverage</span>
@@ -153,12 +154,27 @@
       <p><a href="/pages">Browse all scraped pages</a></p>
     </section>
     <section class="panel">
+      <h2>Firefox browser ingest</h2>
+      <p class="muted">Install the Firefox extension locally, point it at <code>{{.BrowserIngestEndpoint}}</code>, and pages visited after installation will be captured after load.</p>
+      <p class="muted">This browser path can capture login-protected and JS-rendered pages because it uploads the final DOM from Firefox.</p>
+    </section>
+    <section class="panel">
       <h2>Recent pages</h2>
       <ul>
         {{range .RecentPages}}
         <li><a href="/pages/{{.ID}}">{{.URL}}</a></li>
         {{else}}
         <li>No pages scraped yet.</li>
+        {{end}}
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Recent browser pages</h2>
+      <ul>
+        {{range .RecentBrowserPages}}
+        <li><a href="/pages/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a> <span class="muted">· {{.SourceBrowser}} · {{.CapturedAt.Format "2006-01-02 15:04:05 MST"}}</span></li>
+        {{else}}
+        <li>No browser-captured pages yet.</li>
         {{end}}
       </ul>
     </section>
@@ -180,6 +196,16 @@
           <li><strong>{{.Label}}</strong>: {{.ScrapedCount}} scraped pages, {{.EmbeddedCount}} embedded pages</li>
           {{else}}
           <li>No whitelist targets configured.</li>
+          {{end}}
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Pages per source</h2>
+        <ul>
+          {{range .PagesPerSource}}
+          <li><strong>{{.Label}}</strong>: {{.ScrapedCount}} scraped pages, {{.EmbeddedCount}} embedded pages</li>
+          {{else}}
+          <li>No source data yet.</li>
           {{end}}
         </ul>
       </section>
